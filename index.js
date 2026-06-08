@@ -7,6 +7,13 @@ const { ethers } = require("ethers");
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
   polling: true
 });
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, {
+  polling: true
+});
+
+bot.on("message", (msg) => {
+  console.log("CHAT ID:", msg.chat.id);
+});
 
 const TELEGRAM_CHAT_ID = String(process.env.TELEGRAM_CHAT_ID || "");
 const BASE_RPC = process.env.BASE_RPC || "https://mainnet.base.org";
