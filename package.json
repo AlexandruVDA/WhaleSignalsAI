@@ -1,6 +1,7 @@
 {
-  "name": "wai-whalesignals-bot",
+  "name": "wai-whalesignals-base-bot",
   "version": "1.0.0",
+  "description": "WhaleSignals Telegram bot for WAI on Base",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
