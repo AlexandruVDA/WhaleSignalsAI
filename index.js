@@ -10,8 +10,11 @@ const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 const OWNER_TELEGRAM_ID = String(process.env.OWNER_TELEGRAM_ID || "1657654539");
 const TELEGRAM_GROUP_ID = String(process.env.TELEGRAM_GROUP_ID || "-1003819742117");
 
-let signalsEnabled = String(process.env.SIGNALS_ENABLED || "false") === "true";
-const BINANCE_SCAN_ENABLED = String(process.env.BINANCE_SCAN_ENABLED || "false") === "true";
+let signalsEnabled = String(process.env.SIGNALS_ENABLED || "true") === "true";
+
+const MORALIS_ENABLED = String(process.env.MORALIS_ENABLED || "true") === "true";
+const MORALIS_API_KEY = process.env.MORALIS_API_KEY || "";
+const MORALIS_BASE_URL = "https://deep-index.moralis.io/api/v2.2";
 
 const BASE_RPC = process.env.BASE_RPC || "https://mainnet.base.org";
 const ETH_RPC = process.env.ETH_RPC || "https://ethereum.publicnode.com";
@@ -31,7 +34,6 @@ const FLOW24_INTERVAL_SECONDS = Number(process.env.FLOW24_INTERVAL_SECONDS || 86
 const PRICE_UPDATE_INTERVAL_SECONDS = Number(process.env.PRICE_UPDATE_INTERVAL_SECONDS || 60);
 
 const MIN_WAI_ACCESS = Number(process.env.MIN_WAI_ACCESS || 1000);
-const TEST_ACCESS_MODE = String(process.env.TEST_ACCESS_MODE || "false") === "true";
 const WAI_CONTRACT_ADDRESS =
   process.env.WAI_CONTRACT_ADDRESS || "0x27feEC78cDc8b6B3D3782bc4393103F2BCd50427";
 
@@ -55,7 +57,6 @@ const MARKETS = {
     display: "BTC",
     emoji: "🟠",
     gecko: "bitcoin",
-    binance: "BTCUSDT",
     minUsd: Number(process.env.MIN_BTC_USD || 50000),
     transfer: "btc"
   },
@@ -63,7 +64,6 @@ const MARKETS = {
     display: "ETH",
     emoji: "🔵",
     gecko: "ethereum",
-    binance: "ETHUSDT",
     minUsd: Number(process.env.MIN_ETH_USD || 50000),
     transfer: "evm",
     provider: ethProvider,
@@ -76,7 +76,6 @@ const MARKETS = {
     display: "BNB",
     emoji: "🟡",
     gecko: "binancecoin",
-    binance: "BNBUSDT",
     minUsd: Number(process.env.MIN_BNB_USD || 30000),
     transfer: "evm",
     provider: bnbProvider,
@@ -89,7 +88,6 @@ const MARKETS = {
     display: "AVAX",
     emoji: "🔺",
     gecko: "avalanche-2",
-    binance: "AVAXUSDT",
     minUsd: Number(process.env.MIN_AVAX_USD || 30000),
     transfer: "evm",
     provider: avaxProvider,
@@ -102,7 +100,6 @@ const MARKETS = {
     display: "MATIC/POL",
     emoji: "🟣",
     gecko: "polygon-ecosystem-token",
-    binance: "POLUSDT",
     minUsd: Number(process.env.MIN_MATIC_USD || 30000),
     transfer: "evm",
     provider: polygonProvider,
@@ -110,6 +107,25 @@ const MARKETS = {
     minNative: Number(process.env.MIN_MATIC_WHALE || 100000),
     maxNative: Number(process.env.MAX_MATIC_WHALE || 5000000),
     chainName: "Polygon"
+  }
+};
+
+const MORALIS_TOKENS = {
+  ETH: {
+    chain: "eth",
+    tokenAddress: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+  },
+  BNB: {
+    chain: "bsc",
+    tokenAddress: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c"
+  },
+  AVAX: {
+    chain: "avalanche",
+    tokenAddress: "0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7"
+  },
+  MATIC: {
+    chain: "polygon",
+    tokenAddress: "0x0000000000000000000000000000000000001010"
   }
 };
 
@@ -141,7 +157,7 @@ function shortWallet(address) {
 }
 
 function walletLink(address, explorer) {
-  if (!address) return "N/A";
+  if (!address || address === "N/A") return "N/A";
   return `<a href="${explorer}/address/${address}">${shortWallet(address)}</a>`;
 }
 
@@ -160,13 +176,8 @@ function nowIso() {
 function formatUsd(value) {
   const n = Number(value || 0);
 
-  if (Math.abs(n) >= 1000000000) {
-    return `$${(n / 1000000000).toFixed(2)}B`;
-  }
-
-  if (Math.abs(n) >= 1000000) {
-    return `$${(n / 1000000).toFixed(2)}M`;
-  }
+  if (Math.abs(n) >= 1000000000) return `$${(n / 1000000000).toFixed(2)}B`;
+  if (Math.abs(n) >= 1000000) return `$${(n / 1000000).toFixed(2)}M`;
 
   return `$${n.toLocaleString(undefined, {
     maximumFractionDigits: 2
@@ -181,8 +192,8 @@ function formatPct(value) {
 function marketBias(change24h, netFlow = 0) {
   const change = Number(change24h || 0);
 
-  if (change >= 2 && netFlow >= 0) return "Bullish 🟢";
-  if (change <= -2 && netFlow < 0) return "Sell 🔴";
+  if (change >= 2) return "Bullish 🟢";
+  if (change <= -2) return "Bearish 🔴";
   if (netFlow > 100000) return "Accumulation 💰";
   if (netFlow < -100000) return "Distribution ⚠️";
 
@@ -198,12 +209,6 @@ function signalStrength(usdValue) {
 }
 
 function signalTitle(side, usdValue) {
-  if (side === "TRANSFER") {
-    if (usdValue >= 1000000) return "🚨 WHALE ENTRY";
-    if (usdValue >= 500000) return "💰 ACCUMULATION";
-    return "🟡 WHALE TRANSFER";
-  }
-
   if (side === "BUY") {
     if (usdValue >= 1000000) return "🚨 WHALE ENTRY";
     if (usdValue >= 250000) return "💰 ACCUMULATION";
@@ -213,6 +218,12 @@ function signalTitle(side, usdValue) {
   if (side === "SELL") {
     if (usdValue >= 1000000) return "⚠️ WHALE EXIT";
     return "🔴 SMART MONEY SELL";
+  }
+
+  if (side === "TRANSFER") {
+    if (usdValue >= 1000000) return "🚨 WHALE TRANSFER";
+    if (usdValue >= 500000) return "💰 LARGE TRANSFER";
+    return "🟡 WHALE TRANSFER";
   }
 
   return "🐋 WHALE SIGNAL";
@@ -305,7 +316,7 @@ function compactSignalMessage({
 
   let extra = "";
 
-  if (side === "BUY") {
+  if (side === "BUY" || side === "SELL") {
     extra = `
 📊 Avg: ${avgBuy || "N/A"}
 📌 PnL: ${pnl || "N/A"}
@@ -360,8 +371,6 @@ async function updateLivePrices() {
 }
 
 async function getWaiBalance(wallet) {
-  if (TEST_ACCESS_MODE) return 1000000;
-
   const token = new ethers.Contract(WAI_CONTRACT_ADDRESS, ERC20_ABI, baseProvider);
   const decimals = await token.decimals();
   const raw = await token.balanceOf(wallet);
@@ -426,47 +435,139 @@ Required Minimum: ${MIN_WAI_ACCESS} WAI`
   if (changed) writeJson(USERS_FILE, users);
 }
 
-async function scanBinanceTrades(asset) {
-  if (!BINANCE_SCAN_ENABLED) return;
+function extractMoralisHash(s) {
+  return (
+    s.transactionHash ||
+    s.transaction_hash ||
+    s.hash ||
+    s.txHash ||
+    s.tx_hash ||
+    ""
+  );
+}
 
+function extractMoralisWallet(s) {
+  return (
+    s.walletAddress ||
+    s.wallet_address ||
+    s.traderAddress ||
+    s.trader_address ||
+    s.maker ||
+    s.fromAddress ||
+    s.from_address ||
+    "N/A"
+  );
+}
+
+function extractMoralisUsd(s) {
+  return Number(
+    s.totalValueUsd ||
+    s.total_value_usd ||
+    s.usdValue ||
+    s.usd_value ||
+    s.amountUsd ||
+    s.amount_usd ||
+    0
+  );
+}
+
+function extractMoralisAmount(s, side, asset, price, usdValue) {
+  const boughtAmount = Number(
+    s.bought?.amount ||
+    s.boughtAmount ||
+    s.bought_amount ||
+    s.tokenBoughtAmount ||
+    0
+  );
+
+  const soldAmount = Number(
+    s.sold?.amount ||
+    s.soldAmount ||
+    s.sold_amount ||
+    s.tokenSoldAmount ||
+    0
+  );
+
+  if (side === "BUY" && boughtAmount > 0) return boughtAmount;
+  if (side === "SELL" && soldAmount > 0) return soldAmount;
+
+  if (price > 0 && usdValue > 0) return usdValue / price;
+
+  return 0;
+}
+
+async function scanMoralisSwaps(asset) {
+  if (!MORALIS_ENABLED || !MORALIS_API_KEY) return;
+
+  const cfg = MORALIS_TOKENS[asset];
   const market = MARKETS[asset];
-  if (!market) return;
+
+  if (!cfg || !market) return;
 
   try {
-    const res = await axios.get("https://api.binance.com/api/v3/aggTrades", {
-      params: {
-        symbol: market.binance,
-        limit: 80
-      },
-      timeout: 30000
-    });
+    const res = await axios.get(
+      `${MORALIS_BASE_URL}/erc20/${cfg.tokenAddress}/swaps`,
+      {
+        params: {
+          chain: cfg.chain,
+          limit: 20
+        },
+        headers: {
+          "X-API-Key": MORALIS_API_KEY
+        },
+        timeout: 30000
+      }
+    );
 
-    const trades = res.data || [];
+    const swaps = res.data?.result || [];
     const seen = readJson(SEEN_FILE, { txs: [] });
     const seenSet = new Set(seen.txs || []);
 
-    for (const t of trades) {
-      const id = `${market.binance}-${t.a}`;
+    for (const s of swaps) {
+      const hash = extractMoralisHash(s);
+      if (!hash) continue;
+
+      const id = `${asset}-swap-${hash}-${s.transactionIndex || s.logIndex || ""}`;
       if (seenSet.has(id)) continue;
       seenSet.add(id);
 
-      const tradePrice = Number(t.p || 0);
-      const amount = Number(t.q || 0);
-      const usdValue = tradePrice * amount;
+      const type = String(s.transactionType || s.transaction_type || "").toLowerCase();
 
+      let side = "TRANSFER";
+      if (type === "buy") side = "BUY";
+      if (type === "sell") side = "SELL";
+
+      if (side === "TRANSFER") continue;
+
+      const usdValue = extractMoralisUsd(s);
+      if (!Number.isFinite(usdValue)) continue;
       if (usdValue < market.minUsd) continue;
+      if (usdValue > 1000000000) continue;
 
-      const side = t.m ? "SELL" : "BUY";
-      const p = livePrices[asset] || { price: tradePrice, change24h: 0 };
-      const currentPrice = p.price || tradePrice;
+      const price =
+        livePrices[asset].price ||
+        Number(s.bought?.usdPrice || s.sold?.usdPrice || s.priceUsd || 0);
 
-      const avgBuy = side === "BUY" ? formatUsd(tradePrice) : "N/A";
-      const pnl =
-        side === "BUY" && tradePrice > 0
-          ? formatPct(((currentPrice - tradePrice) / tradePrice) * 100)
-          : "N/A";
+      if (!price || !Number.isFinite(price)) continue;
 
-      addFlow(asset, side, amount, usdValue, tradePrice, "Binance Spot", id);
+      const amount = extractMoralisAmount(s, side, asset, price, usdValue);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+      if (asset !== "BTC" && amount > market.maxNative) continue;
+
+      const wallet = extractMoralisWallet(s);
+
+      const avgBuy = side === "BUY" ? formatUsd(price) : "N/A";
+      const pnl = side === "BUY" ? "+0.00%" : "N/A";
+
+      addFlow(
+        asset,
+        side,
+        amount,
+        usdValue,
+        price,
+        s.exchangeName || s.exchange_name || "DEX",
+        hash
+      );
 
       await sendSignal(
         compactSignalMessage({
@@ -474,20 +575,20 @@ async function scanBinanceTrades(asset) {
           side,
           amount,
           usdValue,
-          price: currentPrice,
-          change24h: p.change24h,
-          wallet: "Binance Spot",
-          tx: `<a href="https://www.binance.com/en/trade/${market.binance.replace("USDT", "_USDT")}">Market</a>`,
+          price,
+          change24h: livePrices[asset].change24h,
+          wallet: walletLink(wallet, market.explorer),
+          tx: txLink(hash, market.explorer),
           avgBuy,
           pnl
         })
       );
     }
 
-    seen.txs = Array.from(seenSet).slice(-20000);
+    seen.txs = Array.from(seenSet).slice(-30000);
     writeJson(SEEN_FILE, seen);
   } catch (err) {
-    console.error(`${asset} Binance trade scan error:`, err.message);
+    console.error(`${asset} Moralis swap scan error:`, err.message);
   }
 }
 
@@ -533,7 +634,7 @@ async function scanBTCTransfers() {
       );
     }
 
-    seen.txs = Array.from(seenSet).slice(-20000);
+    seen.txs = Array.from(seenSet).slice(-30000);
     writeJson(SEEN_FILE, seen);
   } catch (err) {
     console.error("BTC transfer scan error:", err.message);
@@ -560,12 +661,14 @@ async function scanEvmTransfers(asset) {
       seenSet.add(id);
 
       const amount = Number(ethers.formatEther(tx.value || 0n));
+
       if (!Number.isFinite(amount)) continue;
       if (amount <= 0) continue;
       if (amount < market.minNative) continue;
       if (amount > market.maxNative) continue;
 
       const usdValue = amount * price;
+
       if (!price || usdValue <= 0) continue;
       if (!Number.isFinite(usdValue)) continue;
       if (usdValue < market.minUsd) continue;
@@ -589,7 +692,7 @@ async function scanEvmTransfers(asset) {
       );
     }
 
-    seen.txs = Array.from(seenSet).slice(-20000);
+    seen.txs = Array.from(seenSet).slice(-30000);
     writeJson(SEEN_FILE, seen);
   } catch (err) {
     console.error(`${asset} transfer scan error:`, err.message);
@@ -599,13 +702,13 @@ async function scanEvmTransfers(asset) {
 async function runSignals() {
   await updateLivePrices();
 
-  if (BINANCE_SCAN_ENABLED) {
-    for (const asset of Object.keys(MARKETS)) {
-      await scanBinanceTrades(asset);
-    }
-  }
-
   await scanBTCTransfers();
+
+  await scanMoralisSwaps("ETH");
+  await scanMoralisSwaps("BNB");
+  await scanMoralisSwaps("AVAX");
+  await scanMoralisSwaps("MATIC");
+
   await scanEvmTransfers("ETH");
   await scanEvmTransfers("BNB");
   await scanEvmTransfers("AVAX");
@@ -783,9 +886,9 @@ bot.onText(/\/markets/, async (msg) => {
 ✅ MATIC/POL
 
 Signals:
-🟢 Buy
-🔴 Sell
-🟡 Transfer
+🟢 Smart Money Buy
+🔴 Smart Money Sell
+🟡 Whale Transfer
 💰 Accumulation
 🚨 Whale Entry
 ⚠️ Whale Exit
@@ -880,8 +983,8 @@ bot.onText(/\/status/, async (msg) => {
 🐋 WhaleSignals Status
 
 Signals: ${signalsEnabled ? "ON ✅" : "OFF ❌"}
-Binance Scan: ${BINANCE_SCAN_ENABLED ? "ON ✅" : "OFF ❌"}
 Prices: CoinGecko ✅
+Moralis: ${MORALIS_ENABLED && MORALIS_API_KEY ? "ON ✅" : "OFF ❌"}
 
 Markets:
 BTC ✅
@@ -891,7 +994,6 @@ AVAX ✅
 MATIC/POL ✅
 
 Min WAI: ${MIN_WAI_ACCESS}
-Test Mode: ${TEST_ACCESS_MODE ? "ON ✅" : "OFF ❌"}
 
 Users: ${users.length}
 Active: ${active}
@@ -910,29 +1012,6 @@ bot.onText(/\/signals_off/, async (msg) => {
   await bot.sendMessage(msg.chat.id, "❌ Signals OFF");
 });
 
-bot.onText(/\/testsignal/, async (msg) => {
-  if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
-
-  await updateLivePrices();
-
-  await sendGroup(
-    compactSignalMessage({
-      asset: "BTC",
-      side: "BUY",
-      amount: 12.5,
-      usdValue: 12.5 * (livePrices.BTC.price || 105000),
-      price: livePrices.BTC.price || 105000,
-      change24h: livePrices.BTC.change24h,
-      wallet: "0x1234...abcd",
-      tx: `<a href="https://mempool.space">TX</a>`,
-      avgBuy: formatUsd(98500),
-      pnl: "+6.60%"
-    })
-  );
-
-  await bot.sendMessage(msg.chat.id, "✅ Demo signal sent.");
-});
-
 bot.onText(/\/checkholders/, async (msg) => {
   if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
   await bot.sendMessage(msg.chat.id, "Checking holders...");
@@ -948,8 +1027,8 @@ setInterval(checkAllHolders, CHECK_HOLDERS_INTERVAL_SECONDS * 1000);
 setInterval(() => postFlowReport(12), FLOW12_INTERVAL_SECONDS * 1000);
 setInterval(() => postFlowReport(24), FLOW24_INTERVAL_SECONDS * 1000);
 
-console.log("WhaleSignals Compact Signal Bot running...");
+console.log("WhaleSignals Real Swap Bot running...");
 console.log("Markets: BTC ETH BNB AVAX MATIC/POL");
 console.log("Prices: CoinGecko");
-console.log("Binance Scan:", BINANCE_SCAN_ENABLED);
+console.log("Moralis:", MORALIS_ENABLED && !!MORALIS_API_KEY);
 console.log("Signals:", signalsEnabled);
