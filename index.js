@@ -596,22 +596,34 @@ bot.onText(/\/testsignal/, async (msg) => {
   await bot.sendMessage(msg.chat.id, "✅ Demo signal sent.");
 });
 
-bot.onText(/\/mtest/, async (msg) => {
+bot.onText(/\/mtest (.+)/, async (msg, match) => {
   if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
 
+  const wallet = match[1].trim();
+
+  if (!ethers.isAddress(wallet)) {
+    return bot.sendMessage(msg.chat.id, "Use: /mtest WALLET_ADDRESS");
+  }
+
   try {
-    const data = await moralisGet(`/erc20/${WAI_CONTRACT_ADDRESS}/price`, {
-      chain: "base"
+    const data = await moralisGet(`/wallets/${wallet}/tokens`, {
+      chain: "base",
+      limit: 5
     });
 
     await bot.sendMessage(
       msg.chat.id,
       `✅ Moralis connected successfully.
 
-${JSON.stringify(data, null, 2)}`
+Wallet token endpoint works.
+Response received: ${data ? "OK" : "EMPTY"}`
     );
   } catch (err) {
-    await bot.sendMessage(msg.chat.id, `❌ Moralis test failed:\n${err.message}`);
+    await bot.sendMessage(
+      msg.chat.id,
+      `❌ Moralis test failed:
+${err.message}`
+    );
   }
 });
 
