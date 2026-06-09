@@ -69,6 +69,7 @@ const MARKETS = {
     provider: ethProvider,
     explorer: ETHERSCAN_URL,
     minNative: Number(process.env.MIN_ETH_WHALE || 50),
+    maxNative: Number(process.env.MAX_ETH_WHALE || 10000),
     chainName: "Ethereum"
   },
   BNB: {
@@ -81,6 +82,7 @@ const MARKETS = {
     provider: bnbProvider,
     explorer: BSCSCAN_URL,
     minNative: Number(process.env.MIN_BNB_WHALE || 500),
+    maxNative: Number(process.env.MAX_BNB_WHALE || 100000),
     chainName: "BNB Chain"
   },
   AVAX: {
@@ -93,6 +95,7 @@ const MARKETS = {
     provider: avaxProvider,
     explorer: SNOWTRACE_URL,
     minNative: Number(process.env.MIN_AVAX_WHALE || 1000),
+    maxNative: Number(process.env.MAX_AVAX_WHALE || 1000000),
     chainName: "Avalanche"
   },
   MATIC: {
@@ -105,6 +108,7 @@ const MARKETS = {
     provider: polygonProvider,
     explorer: POLYGONSCAN_URL,
     minNative: Number(process.env.MIN_MATIC_WHALE || 100000),
+    maxNative: Number(process.env.MAX_MATIC_WHALE || 5000000),
     chainName: "Polygon"
   }
 };
@@ -156,11 +160,13 @@ function nowIso() {
 function formatUsd(value) {
   const n = Number(value || 0);
 
-  if (Math.abs(n) >= 1000000000)
+  if (Math.abs(n) >= 1000000000) {
     return `$${(n / 1000000000).toFixed(2)}B`;
+  }
 
-  if (Math.abs(n) >= 1000000)
+  if (Math.abs(n) >= 1000000) {
     return `$${(n / 1000000).toFixed(2)}M`;
+  }
 
   return `$${n.toLocaleString(undefined, {
     maximumFractionDigits: 2
@@ -174,10 +180,12 @@ function formatPct(value) {
 
 function marketBias(change24h, netFlow = 0) {
   const change = Number(change24h || 0);
+
   if (change >= 2 && netFlow >= 0) return "Bullish 🟢";
   if (change <= -2 && netFlow < 0) return "Sell 🔴";
   if (netFlow > 100000) return "Accumulation 💰";
   if (netFlow < -100000) return "Distribution ⚠️";
+
   return "Neutral ⚪";
 }
 
@@ -237,9 +245,17 @@ function getFlowRows(hours) {
 function getAssetFlow(asset, hours) {
   const rows = getFlowRows(hours).filter(x => x.asset === asset);
 
-  const inflow = rows.filter(x => x.side === "BUY").reduce((s, x) => s + Number(x.usdValue || 0), 0);
-  const outflow = rows.filter(x => x.side === "SELL").reduce((s, x) => s + Number(x.usdValue || 0), 0);
-  const transfer = rows.filter(x => x.side === "TRANSFER").reduce((s, x) => s + Number(x.usdValue || 0), 0);
+  const inflow = rows
+    .filter(x => x.side === "BUY")
+    .reduce((s, x) => s + Number(x.usdValue || 0), 0);
+
+  const outflow = rows
+    .filter(x => x.side === "SELL")
+    .reduce((s, x) => s + Number(x.usdValue || 0), 0);
+
+  const transfer = rows
+    .filter(x => x.side === "TRANSFER")
+    .reduce((s, x) => s + Number(x.usdValue || 0), 0);
 
   return {
     asset,
@@ -266,11 +282,35 @@ async function sendSignal(text) {
   await sendGroup(text);
 }
 
-function compactSignalMessage({ asset, side, amount, usdValue, price, change24h, wallet, tx, avgBuy, pnl }) {
+function compactSignalMessage({
+  asset,
+  side,
+  amount,
+  usdValue,
+  price,
+  change24h,
+  wallet,
+  tx,
+  avgBuy,
+  pnl
+}) {
   const m = MARKETS[asset];
   const title = signalTitle(side, usdValue);
-  const amountText = `${Number(amount || 0).toLocaleString(undefined, { maximumFractionDigits: 4 })} ${m.display}`;
+
+  const amountText = `${Number(amount || 0).toLocaleString(undefined, {
+    maximumFractionDigits: 4
+  })} ${m.display}`;
+
   const changeEmoji = Number(change24h || 0) >= 0 ? "📈" : "📉";
+
+  let extra = "";
+
+  if (side === "BUY") {
+    extra = `
+📊 Avg: ${avgBuy || "N/A"}
+📌 PnL: ${pnl || "N/A"}
+`;
+  }
 
   return `
 ${title}
@@ -282,10 +322,7 @@ ${m.emoji} <b>${m.display}</b>
 💵 ${formatUsd(price)}
 ${changeEmoji} ${formatPct(change24h)}
 🔥 ${signalStrength(usdValue)}
-
-📊 Avg: ${avgBuy || "N/A"}
-📌 PnL: ${pnl || "N/A"}
-
+${extra}
 👛 ${wallet}
 🔗 ${tx}
 `;
@@ -458,7 +495,9 @@ async function scanBTCTransfers() {
   const market = MARKETS.BTC;
 
   try {
-    const res = await axios.get("https://mempool.space/api/mempool/recent", { timeout: 30000 });
+    const res = await axios.get("https://mempool.space/api/mempool/recent", {
+      timeout: 30000
+    });
 
     const txs = res.data || [];
     const seen = readJson(SEEN_FILE, { txs: [] });
@@ -474,6 +513,7 @@ async function scanBTCTransfers() {
       const usdValue = amount * price;
 
       if (!price || usdValue < market.minUsd) continue;
+      if (usdValue > 1000000000) continue;
 
       addFlow("BTC", "TRANSFER", amount, usdValue, price, "Bitcoin Mempool", tx.txid);
 
@@ -520,10 +560,16 @@ async function scanEvmTransfers(asset) {
       seenSet.add(id);
 
       const amount = Number(ethers.formatEther(tx.value || 0n));
+      if (!Number.isFinite(amount)) continue;
+      if (amount <= 0) continue;
       if (amount < market.minNative) continue;
+      if (amount > market.maxNative) continue;
 
       const usdValue = amount * price;
-      if (!price || usdValue < market.minUsd) continue;
+      if (!price || usdValue <= 0) continue;
+      if (!Number.isFinite(usdValue)) continue;
+      if (usdValue < market.minUsd) continue;
+      if (usdValue > 1000000000) continue;
 
       addFlow(asset, "TRANSFER", amount, usdValue, price, market.chainName, tx.hash);
 
