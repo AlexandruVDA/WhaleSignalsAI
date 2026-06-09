@@ -100,7 +100,13 @@ async function checkAllHolders() {
 
         await bot.sendMessage(
           user.telegramId,
-          `❌ Acces revocat.\n\nSold WAI: ${balance}\nMinim necesar: ${MIN_WAI_ACCESS} WAI`
+          `❌ Access Revoked
+
+Your WAI balance is now below the required minimum.
+
+Wallet: ${shortWallet(user.wallet)}
+Current Balance: ${balance} WAI
+Required Minimum: ${MIN_WAI_ACCESS} WAI`
         );
 
         changed = true;
@@ -122,16 +128,20 @@ bot.onText(/\/start/, async (msg) => {
   await bot.sendMessage(msg.chat.id, `
 🐋 WhaleSignals VIP Access
 
-Comenzi:
+Welcome to WhaleSignals.
 
-/verify WALLET_BASE
+To access the private VIP signals group, verify your WAI holdings on Base.
+
+Commands:
+
+/verify WALLET_ADDRESS
 /myaccess
-/status
 
-Exemplu:
+Example:
 /verify 0x1234...
 
-Ai nevoie de minim ${MIN_WAI_ACCESS} WAI pe Base.
+Minimum Required:
+${MIN_WAI_ACCESS} WAI
 `);
 });
 
@@ -141,7 +151,7 @@ bot.onText(/\/verify (.+)/, async (msg, match) => {
 
   try {
     if (!ethers.isAddress(wallet)) {
-      return bot.sendMessage(msg.chat.id, "❌ Wallet invalid.");
+      return bot.sendMessage(msg.chat.id, "❌ Invalid wallet address.");
     }
 
     const balance = await getWaiBalance(wallet);
@@ -149,7 +159,13 @@ bot.onText(/\/verify (.+)/, async (msg, match) => {
     if (balance < MIN_WAI_ACCESS) {
       return bot.sendMessage(
         msg.chat.id,
-        `❌ Acces refuzat.\n\nWallet: ${shortWallet(wallet)}\nSold: ${balance} WAI\nMinim necesar: ${MIN_WAI_ACCESS} WAI`
+        `❌ Access Denied
+
+Wallet: ${shortWallet(wallet)}
+Balance: ${balance} WAI
+Required Minimum: ${MIN_WAI_ACCESS} WAI
+
+You need to hold more WAI on Base to access the VIP group.`
       );
     }
 
@@ -183,14 +199,22 @@ bot.onText(/\/verify (.+)/, async (msg, match) => {
 
     await bot.sendMessage(
       msg.chat.id,
-      `✅ Acces aprobat.\n\nWallet: ${shortWallet(wallet)}\nSold: ${balance} WAI\n\nLink VIP valabil 10 minute:\n${inviteLink}`
+      `✅ Access Granted
+
+Wallet: ${shortWallet(wallet)}
+Balance: ${balance} WAI
+
+VIP Group Invite:
+${inviteLink}
+
+This invite link is valid for 10 minutes and can be used once.`
     );
 
   } catch (err) {
     console.error(err);
     await bot.sendMessage(
       msg.chat.id,
-      "❌ Eroare la verificare. Verifică WAI_CONTRACT_ADDRESS, BASE_RPC și permisiunile botului."
+      "❌ Verification failed. Please try again later."
     );
   }
 });
@@ -202,16 +226,19 @@ bot.onText(/\/myaccess/, async (msg) => {
   const user = users.find(u => String(u.telegramId) === telegramId);
 
   if (!user) {
-    return bot.sendMessage(msg.chat.id, "Nu ai wallet verificat încă.");
+    return bot.sendMessage(
+      msg.chat.id,
+      "No verified wallet found. Use /verify WALLET_ADDRESS to request VIP access."
+    );
   }
 
   await bot.sendMessage(msg.chat.id, `
-🐋 WhaleSignals Access
+🐋 WhaleSignals VIP Access
 
 Status: ${user.verified ? "ACTIVE ✅" : "INACTIVE ❌"}
 Wallet: ${shortWallet(user.wallet)}
 Last Balance: ${user.lastBalance} WAI
-Last Check: ${user.lastCheck || "never"}
+Last Check: ${user.lastCheck || "Never"}
 `);
 });
 
@@ -228,12 +255,13 @@ bot.onText(/\/status/, async (msg) => {
 
 Group ID: ${TELEGRAM_GROUP_ID}
 WAI Contract: ${WAI_CONTRACT_ADDRESS || "NOT SET"}
-Min WAI Access: ${MIN_WAI_ACCESS}
+Minimum WAI Required: ${MIN_WAI_ACCESS}
 
-Users Total: ${users.length}
-Users Active: ${active}
+Total Users: ${users.length}
+Active Users: ${active}
 
-Auto Check: every ${CHECK_HOLDERS_INTERVAL_SECONDS}s
+Automatic Holder Check:
+Every ${CHECK_HOLDERS_INTERVAL_SECONDS} seconds
 `);
 });
 
@@ -244,10 +272,10 @@ bot.onText(/\/testgroup/, async (msg) => {
 
   await bot.sendMessage(
     TELEGRAM_GROUP_ID,
-    "🐋 WhaleSignals VIP group connected."
+    "🐋 WhaleSignals VIP group connected successfully."
   );
 
-  await bot.sendMessage(msg.chat.id, "✅ Test trimis în grup.");
+  await bot.sendMessage(msg.chat.id, "✅ Test message sent to the VIP group.");
 });
 
 bot.onText(/\/checkholders/, async (msg) => {
@@ -255,9 +283,9 @@ bot.onText(/\/checkholders/, async (msg) => {
     return bot.sendMessage(msg.chat.id, "Access denied.");
   }
 
-  await bot.sendMessage(msg.chat.id, "Checking holders...");
+  await bot.sendMessage(msg.chat.id, "Checking verified holders...");
   await checkAllHolders();
-  await bot.sendMessage(msg.chat.id, "✅ Holder check finished.");
+  await bot.sendMessage(msg.chat.id, "✅ Holder check completed.");
 });
 
 setInterval(checkAllHolders, CHECK_HOLDERS_INTERVAL_SECONDS * 1000);
@@ -265,4 +293,4 @@ setInterval(checkAllHolders, CHECK_HOLDERS_INTERVAL_SECONDS * 1000);
 console.log("WAI VIP Access Bot running...");
 console.log("Owner:", OWNER_TELEGRAM_ID);
 console.log("Group:", TELEGRAM_GROUP_ID);
-console.log("Min WAI:", MIN_WAI_ACCESS);
+console.log("Minimum WAI:", MIN_WAI_ACCESS);
