@@ -11,12 +11,13 @@ const OWNER_TELEGRAM_ID = String(process.env.OWNER_TELEGRAM_ID || "1657654539");
 const TELEGRAM_GROUP_ID = String(process.env.TELEGRAM_GROUP_ID || "-1003819742117");
 
 let signalsEnabled = String(process.env.SIGNALS_ENABLED || "false") === "true";
+const BINANCE_SCAN_ENABLED = String(process.env.BINANCE_SCAN_ENABLED || "false") === "true";
 
 const BASE_RPC = process.env.BASE_RPC || "https://mainnet.base.org";
 const ETH_RPC = process.env.ETH_RPC || "https://ethereum.publicnode.com";
 const BNB_RPC = process.env.BNB_RPC || "https://bsc-dataseed.binance.org";
 const AVAX_RPC = process.env.AVAX_RPC || "https://api.avax.network/ext/bc/C/rpc";
-const POLYGON_RPC = process.env.POLYGON_RPC || "https://polygon-rpc.com";
+const POLYGON_RPC = process.env.POLYGON_RPC || "https://polygon-bor-rpc.publicnode.com";
 
 const ETHERSCAN_URL = "https://etherscan.io";
 const BSCSCAN_URL = "https://bscscan.com";
@@ -53,14 +54,16 @@ const MARKETS = {
   BTC: {
     display: "BTC",
     emoji: "🟠",
-    binance: process.env.BTC_BINANCE_SYMBOL || "BTCUSDT",
+    gecko: "bitcoin",
+    binance: "BTCUSDT",
     minUsd: Number(process.env.MIN_BTC_USD || 50000),
     transfer: "btc"
   },
   ETH: {
     display: "ETH",
     emoji: "🔵",
-    binance: process.env.ETH_BINANCE_SYMBOL || "ETHUSDT",
+    gecko: "ethereum",
+    binance: "ETHUSDT",
     minUsd: Number(process.env.MIN_ETH_USD || 50000),
     transfer: "evm",
     provider: ethProvider,
@@ -71,7 +74,8 @@ const MARKETS = {
   BNB: {
     display: "BNB",
     emoji: "🟡",
-    binance: process.env.BNB_BINANCE_SYMBOL || "BNBUSDT",
+    gecko: "binancecoin",
+    binance: "BNBUSDT",
     minUsd: Number(process.env.MIN_BNB_USD || 30000),
     transfer: "evm",
     provider: bnbProvider,
@@ -82,7 +86,8 @@ const MARKETS = {
   AVAX: {
     display: "AVAX",
     emoji: "🔺",
-    binance: process.env.AVAX_BINANCE_SYMBOL || "AVAXUSDT",
+    gecko: "avalanche-2",
+    binance: "AVAXUSDT",
     minUsd: Number(process.env.MIN_AVAX_USD || 30000),
     transfer: "evm",
     provider: avaxProvider,
@@ -93,7 +98,8 @@ const MARKETS = {
   MATIC: {
     display: "MATIC/POL",
     emoji: "🟣",
-    binance: process.env.MATIC_BINANCE_SYMBOL || "POLUSDT",
+    gecko: "polygon-ecosystem-token",
+    binance: "POLUSDT",
     minUsd: Number(process.env.MIN_MATIC_USD || 30000),
     transfer: "evm",
     provider: polygonProvider,
@@ -105,11 +111,7 @@ const MARKETS = {
 
 let livePrices = {};
 for (const asset of Object.keys(MARKETS)) {
-  livePrices[asset] = {
-    price: 0,
-    change24h: 0,
-    volume24h: 0
-  };
+  livePrices[asset] = { price: 0, change24h: 0, volume24h: 0 };
 }
 
 function isOwner(chatId) {
@@ -285,23 +287,30 @@ ${changeEmoji} ${formatPct(change24h)}
 
 async function updateLivePrices() {
   try {
-    const symbols = Object.values(MARKETS).map(m => m.binance);
-    const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(symbols))}`;
+    const ids = Object.values(MARKETS).map(m => m.gecko).join(",");
+
+    const url =
+      "https://api.coingecko.com/api/v3/simple/price" +
+      `?ids=${ids}` +
+      "&vs_currencies=usd" +
+      "&include_24hr_vol=true" +
+      "&include_24hr_change=true";
 
     const res = await axios.get(url, { timeout: 30000 });
+    const data = res.data || {};
 
-    for (const row of res.data || []) {
-      const asset = Object.keys(MARKETS).find(k => MARKETS[k].binance === row.symbol);
-      if (!asset) continue;
+    for (const [asset, market] of Object.entries(MARKETS)) {
+      const row = data[market.gecko];
+      if (!row) continue;
 
       livePrices[asset] = {
-        price: Number(row.lastPrice || 0),
-        change24h: Number(row.priceChangePercent || 0),
-        volume24h: Number(row.quoteVolume || 0)
+        price: Number(row.usd || 0),
+        change24h: Number(row.usd_24h_change || 0),
+        volume24h: Number(row.usd_24h_vol || 0)
       };
     }
 
-    console.log("Live prices updated.");
+    console.log("Live CoinGecko prices updated.");
   } catch (err) {
     console.error("Price update error:", err.message);
   }
@@ -375,6 +384,8 @@ Required Minimum: ${MIN_WAI_ACCESS} WAI`
 }
 
 async function scanBinanceTrades(asset) {
+  if (!BINANCE_SCAN_ENABLED) return;
+
   const market = MARKETS[asset];
   if (!market) return;
 
@@ -456,7 +467,7 @@ async function scanBTCTransfers() {
       const amount = Number(tx.value || 0) / 100000000;
       const usdValue = amount * price;
 
-      if (usdValue < market.minUsd) continue;
+      if (!price || usdValue < market.minUsd) continue;
 
       addFlow("BTC", "TRANSFER", amount, usdValue, price, "Bitcoin Mempool", tx.txid);
 
@@ -506,6 +517,8 @@ async function scanEvmTransfers(asset) {
       if (amount < market.minNative) continue;
 
       const usdValue = amount * price;
+      if (!price || usdValue < market.minUsd) continue;
+
       addFlow(asset, "TRANSFER", amount, usdValue, price, market.chainName, tx.hash);
 
       await sendSignal(
@@ -534,8 +547,10 @@ async function scanEvmTransfers(asset) {
 async function runSignals() {
   await updateLivePrices();
 
-  for (const asset of Object.keys(MARKETS)) {
-    await scanBinanceTrades(asset);
+  if (BINANCE_SCAN_ENABLED) {
+    for (const asset of Object.keys(MARKETS)) {
+      await scanBinanceTrades(asset);
+    }
   }
 
   await scanBTCTransfers();
@@ -741,6 +756,8 @@ bot.onText(/\/price (.+)/, async (msg, match) => {
     return bot.sendMessage(msg.chat.id, "Supported: BTC, ETH, BNB, AVAX, MATIC");
   }
 
+  await updateLivePrices();
+
   const p = livePrices[asset];
   const f = getAssetFlow(asset, 24);
   const m = MARKETS[asset];
@@ -756,6 +773,8 @@ ${marketBias(p.change24h, f.net)}
 });
 
 bot.onText(/\/prices/, async (msg) => {
+  await updateLivePrices();
+
   let text = `📊 <b>LIVE PRICES</b>\n\n`;
 
   for (const asset of Object.keys(MARKETS)) {
@@ -794,6 +813,7 @@ bot.onText(/\/topoutflow/, async (msg) => {
 
 bot.onText(/\/summary/, async (msg) => {
   if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
+  await updateLivePrices();
   await sendGroup(buildSummary());
   await bot.sendMessage(msg.chat.id, "✅ Summary sent.");
 });
@@ -808,6 +828,8 @@ bot.onText(/\/status/, async (msg) => {
 🐋 WhaleSignals Status
 
 Signals: ${signalsEnabled ? "ON ✅" : "OFF ❌"}
+Binance Scan: ${BINANCE_SCAN_ENABLED ? "ON ✅" : "OFF ❌"}
+Prices: CoinGecko ✅
 
 Markets:
 BTC ✅
@@ -838,6 +860,8 @@ bot.onText(/\/signals_off/, async (msg) => {
 
 bot.onText(/\/testsignal/, async (msg) => {
   if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
+
+  await updateLivePrices();
 
   await sendGroup(
     compactSignalMessage({
@@ -874,4 +898,6 @@ setInterval(() => postFlowReport(24), FLOW24_INTERVAL_SECONDS * 1000);
 
 console.log("WhaleSignals Compact Signal Bot running...");
 console.log("Markets: BTC ETH BNB AVAX MATIC/POL");
+console.log("Prices: CoinGecko");
+console.log("Binance Scan:", BINANCE_SCAN_ENABLED);
 console.log("Signals:", signalsEnabled);
