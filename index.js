@@ -56,6 +56,8 @@ const MARKETS = {
   BTC: {
     display: "BTC",
     emoji: "🟠",
+    chainEmoji: "🟠",
+    chainLabel: "BITCOIN",
     gecko: "bitcoin",
     minUsd: Number(process.env.MIN_BTC_USD || 50000),
     transfer: "btc"
@@ -63,6 +65,8 @@ const MARKETS = {
   ETH: {
     display: "ETH",
     emoji: "🔵",
+    chainEmoji: "🔵",
+    chainLabel: "ETHEREUM",
     gecko: "ethereum",
     minUsd: Number(process.env.MIN_ETH_USD || 50000),
     transfer: "evm",
@@ -75,6 +79,8 @@ const MARKETS = {
   BNB: {
     display: "BNB",
     emoji: "🟡",
+    chainEmoji: "🟡",
+    chainLabel: "BNB CHAIN",
     gecko: "binancecoin",
     minUsd: Number(process.env.MIN_BNB_USD || 30000),
     transfer: "evm",
@@ -87,6 +93,8 @@ const MARKETS = {
   AVAX: {
     display: "AVAX",
     emoji: "🔺",
+    chainEmoji: "🔴",
+    chainLabel: "AVALANCHE",
     gecko: "avalanche-2",
     minUsd: Number(process.env.MIN_AVAX_USD || 30000),
     transfer: "evm",
@@ -99,6 +107,8 @@ const MARKETS = {
   MATIC: {
     display: "MATIC/POL",
     emoji: "🟣",
+    chainEmoji: "🟣",
+    chainLabel: "POLYGON",
     gecko: "polygon-ecosystem-token",
     minUsd: Number(process.env.MIN_MATIC_USD || 30000),
     transfer: "evm",
@@ -111,22 +121,10 @@ const MARKETS = {
 };
 
 const MORALIS_TOKENS = {
-  ETH: {
-    chain: "eth",
-    tokenAddress: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-  },
-  BNB: {
-    chain: "bsc",
-    tokenAddress: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c"
-  },
-  AVAX: {
-    chain: "avalanche",
-    tokenAddress: "0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7"
-  },
-  MATIC: {
-    chain: "polygon",
-    tokenAddress: "0x0000000000000000000000000000000000001010"
-  }
+  ETH: { chain: "eth", tokenAddress: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2" },
+  BNB: { chain: "bsc", tokenAddress: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c" },
+  AVAX: { chain: "avalanche", tokenAddress: "0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7" },
+  MATIC: { chain: "polygon", tokenAddress: "0x0000000000000000000000000000000000001010" }
 };
 
 let livePrices = {};
@@ -152,7 +150,7 @@ function writeJson(file, data) {
 }
 
 function shortWallet(address) {
-  if (!address) return "N/A";
+  if (!address || address === "N/A") return "N/A";
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
@@ -175,13 +173,10 @@ function nowIso() {
 
 function formatUsd(value) {
   const n = Number(value || 0);
-
   if (Math.abs(n) >= 1000000000) return `$${(n / 1000000000).toFixed(2)}B`;
   if (Math.abs(n) >= 1000000) return `$${(n / 1000000).toFixed(2)}M`;
-
-  return `$${n.toLocaleString(undefined, {
-    maximumFractionDigits: 2
-  })}`;
+  if (Math.abs(n) >= 1000) return `$${(n / 1000).toFixed(2)}K`;
+  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 }
 
 function formatPct(value) {
@@ -189,14 +184,19 @@ function formatPct(value) {
   return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
 }
 
+function whaleClass(usdValue) {
+  const v = Number(usdValue || 0);
+  if (v >= 1000000) return "🦈 GIANT WHALE";
+  if (v >= 250000) return "🐳 MEGA WHALE";
+  return "🐋 WHALE";
+}
+
 function marketBias(change24h, netFlow = 0) {
   const change = Number(change24h || 0);
-
   if (change >= 2) return "Bullish 🟢";
   if (change <= -2) return "Bearish 🔴";
   if (netFlow > 100000) return "Accumulation 💰";
   if (netFlow < -100000) return "Distribution ⚠️";
-
   return "Neutral ⚪";
 }
 
@@ -256,17 +256,9 @@ function getFlowRows(hours) {
 function getAssetFlow(asset, hours) {
   const rows = getFlowRows(hours).filter(x => x.asset === asset);
 
-  const inflow = rows
-    .filter(x => x.side === "BUY")
-    .reduce((s, x) => s + Number(x.usdValue || 0), 0);
-
-  const outflow = rows
-    .filter(x => x.side === "SELL")
-    .reduce((s, x) => s + Number(x.usdValue || 0), 0);
-
-  const transfer = rows
-    .filter(x => x.side === "TRANSFER")
-    .reduce((s, x) => s + Number(x.usdValue || 0), 0);
+  const inflow = rows.filter(x => x.side === "BUY").reduce((s, x) => s + Number(x.usdValue || 0), 0);
+  const outflow = rows.filter(x => x.side === "SELL").reduce((s, x) => s + Number(x.usdValue || 0), 0);
+  const transfer = rows.filter(x => x.side === "TRANSFER").reduce((s, x) => s + Number(x.usdValue || 0), 0);
 
   return {
     asset,
@@ -316,15 +308,24 @@ function compactSignalMessage({
 
   let extra = "";
 
-  if (side === "BUY" || side === "SELL") {
+  if (side === "BUY") {
     extra = `
-📊 Avg: ${avgBuy || "N/A"}
-📌 PnL: ${pnl || "N/A"}
+📊 Avg Entry: ${avgBuy || "Estimating"}
+📌 Est. PnL: ${pnl || "0.00%"}
+`;
+  }
+
+  if (side === "SELL") {
+    extra = `
+📊 Exit: ${formatUsd(price)}
+📌 Sell Signal
 `;
   }
 
   return `
 ${title}
+${m.chainEmoji} <b>${m.chainLabel}</b>
+${whaleClass(usdValue)}
 
 ${m.emoji} <b>${m.display}</b>
 💰 ${formatUsd(usdValue)}
@@ -374,7 +375,6 @@ async function getWaiBalance(wallet) {
   const token = new ethers.Contract(WAI_CONTRACT_ADDRESS, ERC20_ABI, baseProvider);
   const decimals = await token.decimals();
   const raw = await token.balanceOf(wallet);
-
   return Number(ethers.formatUnits(raw, decimals));
 }
 
@@ -406,7 +406,6 @@ async function checkAllHolders() {
 
     try {
       const balance = await getWaiBalance(user.wallet);
-
       user.lastBalance = balance;
       user.lastCheck = nowIso();
 
@@ -436,14 +435,7 @@ Required Minimum: ${MIN_WAI_ACCESS} WAI`
 }
 
 function extractMoralisHash(s) {
-  return (
-    s.transactionHash ||
-    s.transaction_hash ||
-    s.hash ||
-    s.txHash ||
-    s.tx_hash ||
-    ""
-  );
+  return s.transactionHash || s.transaction_hash || s.hash || s.txHash || s.tx_hash || "";
 }
 
 function extractMoralisWallet(s) {
@@ -471,7 +463,7 @@ function extractMoralisUsd(s) {
   );
 }
 
-function extractMoralisAmount(s, side, asset, price, usdValue) {
+function extractMoralisAmount(s, side, price, usdValue) {
   const boughtAmount = Number(
     s.bought?.amount ||
     s.boughtAmount ||
@@ -490,7 +482,6 @@ function extractMoralisAmount(s, side, asset, price, usdValue) {
 
   if (side === "BUY" && boughtAmount > 0) return boughtAmount;
   if (side === "SELL" && soldAmount > 0) return soldAmount;
-
   if (price > 0 && usdValue > 0) return usdValue / price;
 
   return 0;
@@ -505,19 +496,16 @@ async function scanMoralisSwaps(asset) {
   if (!cfg || !market) return;
 
   try {
-    const res = await axios.get(
-      `${MORALIS_BASE_URL}/erc20/${cfg.tokenAddress}/swaps`,
-      {
-        params: {
-          chain: cfg.chain,
-          limit: 20
-        },
-        headers: {
-          "X-API-Key": MORALIS_API_KEY
-        },
-        timeout: 30000
-      }
-    );
+    const res = await axios.get(`${MORALIS_BASE_URL}/erc20/${cfg.tokenAddress}/swaps`, {
+      params: {
+        chain: cfg.chain,
+        limit: 20
+      },
+      headers: {
+        "X-API-Key": MORALIS_API_KEY
+      },
+      timeout: 30000
+    });
 
     const swaps = res.data?.result || [];
     const seen = readJson(SEEN_FILE, { txs: [] });
@@ -550,24 +538,16 @@ async function scanMoralisSwaps(asset) {
 
       if (!price || !Number.isFinite(price)) continue;
 
-      const amount = extractMoralisAmount(s, side, asset, price, usdValue);
+      const amount = extractMoralisAmount(s, side, price, usdValue);
       if (!Number.isFinite(amount) || amount <= 0) continue;
-      if (asset !== "BTC" && amount > market.maxNative) continue;
+      if (amount > market.maxNative) continue;
 
       const wallet = extractMoralisWallet(s);
 
-      const avgBuy = side === "BUY" ? formatUsd(price) : "N/A";
-      const pnl = side === "BUY" ? "+0.00%" : "N/A";
+      const avgBuy = side === "BUY" ? formatUsd(price) : "";
+      const pnl = side === "BUY" ? "+0.00%" : "";
 
-      addFlow(
-        asset,
-        side,
-        amount,
-        usdValue,
-        price,
-        s.exchangeName || s.exchange_name || "DEX",
-        hash
-      );
+      addFlow(asset, side, amount, usdValue, price, s.exchangeName || s.exchange_name || "DEX", hash);
 
       await sendSignal(
         compactSignalMessage({
@@ -627,9 +607,7 @@ async function scanBTCTransfers() {
           price,
           change24h: livePrices.BTC.change24h,
           wallet: "BTC Mempool",
-          tx: btcTxLink(tx.txid),
-          avgBuy: "N/A",
-          pnl: "N/A"
+          tx: btcTxLink(tx.txid)
         })
       );
     }
@@ -685,9 +663,7 @@ async function scanEvmTransfers(asset) {
           price,
           change24h: livePrices[asset].change24h,
           wallet: walletLink(tx.from, market.explorer),
-          tx: txLink(tx.hash, market.explorer),
-          avgBuy: "N/A",
-          pnl: "N/A"
+          tx: txLink(tx.hash, market.explorer)
         })
       );
     }
@@ -885,6 +861,13 @@ bot.onText(/\/markets/, async (msg) => {
 ✅ AVAX
 ✅ MATIC/POL
 
+Chains:
+🔵 Ethereum
+🟡 BNB Chain
+🟣 Polygon
+🔷 Base
+⚫ Arbitrum
+
 Signals:
 🟢 Smart Money Buy
 🔴 Smart Money Sell
@@ -920,6 +903,7 @@ bot.onText(/\/price (.+)/, async (msg, match) => {
   await bot.sendMessage(msg.chat.id, `
 📊 <b>${m.display}</b>
 
+${m.chainEmoji} ${m.chainLabel}
 💵 ${formatUsd(p.price)}
 ${Number(p.change24h || 0) >= 0 ? "📈" : "📉"} ${formatPct(p.change24h)}
 🌊 ${f.net >= 0 ? "+" : ""}${formatUsd(f.net)}
@@ -984,7 +968,7 @@ bot.onText(/\/status/, async (msg) => {
 
 Signals: ${signalsEnabled ? "ON ✅" : "OFF ❌"}
 Prices: CoinGecko ✅
-Moralis: ${MORALIS_ENABLED && MORALIS_API_KEY ? "ON ✅" : "OFF ❌"}
+Moralis DEX: ${MORALIS_ENABLED && MORALIS_API_KEY ? "ON ✅" : "OFF ❌"}
 
 Markets:
 BTC ✅
@@ -1030,5 +1014,5 @@ setInterval(() => postFlowReport(24), FLOW24_INTERVAL_SECONDS * 1000);
 console.log("WhaleSignals Real Swap Bot running...");
 console.log("Markets: BTC ETH BNB AVAX MATIC/POL");
 console.log("Prices: CoinGecko");
-console.log("Moralis:", MORALIS_ENABLED && !!MORALIS_API_KEY);
+console.log("Moralis DEX:", MORALIS_ENABLED && !!MORALIS_API_KEY);
 console.log("Signals:", signalsEnabled);
