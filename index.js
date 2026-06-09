@@ -155,10 +155,16 @@ function nowIso() {
 
 function formatUsd(value) {
   const n = Number(value || 0);
-  if (Math.abs(n) >= 1000000000) return `$${(n / 1000000000).toFixed(2)}B`;
-  if (Math.abs(n) >= 1000000) return `$${(n / 1000000).toFixed(2)}M`;
-  if (Math.abs(n) >= 1000) return `$${(n / 1000).toFixed(2)}K`;
-  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+
+  if (Math.abs(n) >= 1000000000)
+    return `$${(n / 1000000000).toFixed(2)}B`;
+
+  if (Math.abs(n) >= 1000000)
+    return `$${(n / 1000000).toFixed(2)}M`;
+
+  return `$${n.toLocaleString(undefined, {
+    maximumFractionDigits: 2
+  })}`;
 }
 
 function formatPct(value) {
