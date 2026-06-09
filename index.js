@@ -10,16 +10,18 @@ const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 const OWNER_TELEGRAM_ID = String(process.env.OWNER_TELEGRAM_ID || "1657654539");
 const TELEGRAM_GROUP_ID = String(process.env.TELEGRAM_GROUP_ID || "-1003819742117");
 
+const MORALIS_ENABLED = String(process.env.MORALIS_ENABLED || "true") === "true";
+const MORALIS_API_KEY = process.env.MORALIS_API_KEY || "";
+const MORALIS_URL = "https://deep-index.moralis.io/api/v2.2";
+
 const BASE_RPC = process.env.BASE_RPC || "https://mainnet.base.org";
 const BASESCAN_URL = "https://basescan.org";
 
-const WAI_CONTRACT_ADDRESS = process.env.WAI_CONTRACT_ADDRESS || "0x27feEC78cDc8b6B3D3782bc4393103F2BCd50427";
+const WAI_CONTRACT_ADDRESS =
+  process.env.WAI_CONTRACT_ADDRESS || "0x27feEC78cDc8b6B3D3782bc4393103F2BCd50427";
+
 const MIN_WAI_ACCESS = Number(process.env.MIN_WAI_ACCESS || 1000);
 const TEST_ACCESS_MODE = String(process.env.TEST_ACCESS_MODE || "true") === "true";
-
-const BITQUERY_ENABLED = String(process.env.BITQUERY_ENABLED || "false") === "true";
-const BITQUERY_API_KEY = process.env.BITQUERY_API_KEY || "";
-const BITQUERY_URL = "https://streaming.bitquery.io/graphql";
 
 let signalsEnabled = String(process.env.SIGNALS_ENABLED || "false") === "true";
 
@@ -27,7 +29,16 @@ const CHECK_SIGNALS_INTERVAL_SECONDS = Number(process.env.CHECK_SIGNALS_INTERVAL
 const CHECK_HOLDERS_INTERVAL_SECONDS = Number(process.env.CHECK_HOLDERS_INTERVAL_SECONDS || 3600);
 
 const MIN_WHALE_USD = Number(process.env.MIN_WHALE_USD || 50000);
-const MIN_TRANSFER_ETH = Number(process.env.MIN_TRANSFER_ETH || 20);
+const MIN_NATIVE_ETH = Number(process.env.MIN_NATIVE_ETH || 20);
+
+const WATCH_TOKENS = [
+  {
+    symbol: "WAI",
+    chain: "base",
+    address: WAI_CONTRACT_ADDRESS,
+    explorer: BASESCAN_URL
+  }
+];
 
 const USERS_FILE = "users.json";
 const SEEN_FILE = "seen.json";
@@ -38,8 +49,6 @@ const ERC20_ABI = [
   "function balanceOf(address owner) view returns (uint256)",
   "function decimals() view returns (uint8)"
 ];
-
-const STABLES = ["USDC", "USDT", "DAI", "USDbC", "USD+", "USDS"];
 
 function isOwner(chatId) {
   return String(chatId) === OWNER_TELEGRAM_ID;
@@ -63,23 +72,18 @@ function shortWallet(address) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-function walletLink(address) {
+function walletLink(address, explorer = BASESCAN_URL) {
   if (!address) return "unknown";
-  return `<a href="${BASESCAN_URL}/address/${address}">${shortWallet(address)}</a>`;
+  return `<a href="${explorer}/address/${address}">${shortWallet(address)}</a>`;
 }
 
-function txLink(hash) {
-  return `<a href="${BASESCAN_URL}/tx/${hash}">View Transaction</a>`;
+function txLink(hash, explorer = BASESCAN_URL) {
+  return `<a href="${explorer}/tx/${hash}">View Transaction</a>`;
 }
 
-function tokenLink(address, symbol) {
-  if (!address) return symbol || "Unknown";
-  return `<a href="${BASESCAN_URL}/token/${address}">${symbol || shortWallet(address)}</a>`;
-}
-
-function isStable(symbol) {
-  if (!symbol) return false;
-  return STABLES.includes(String(symbol).toUpperCase());
+function tokenLink(address, symbol, explorer = BASESCAN_URL) {
+  if (!address) return symbol || "Token";
+  return `<a href="${explorer}/token/${address}">${symbol || shortWallet(address)}</a>`;
 }
 
 async function sendGroup(text) {
@@ -96,36 +100,25 @@ async function sendSignal(text) {
   await sendGroup(text);
 }
 
-async function bitqueryRequest(query, variables = {}) {
-  if (!BITQUERY_ENABLED || !BITQUERY_API_KEY) {
-    throw new Error("Bitquery not configured");
+async function moralisGet(path, params = {}) {
+  if (!MORALIS_ENABLED || !MORALIS_API_KEY) {
+    throw new Error("Moralis not configured");
   }
 
-  const res = await axios.post(
-    BITQUERY_URL,
-    { query, variables },
-    {
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${BITQUERY_API_KEY}`
-      },
-      timeout: 30000
-    }
-  );
+  const res = await axios.get(`${MORALIS_URL}${path}`, {
+    headers: {
+      accept: "application/json",
+      "X-API-Key": MORALIS_API_KEY
+    },
+    params,
+    timeout: 30000
+  });
 
-  if (res.data.errors) {
-    throw new Error(JSON.stringify(res.data.errors));
-  }
-
-  return res.data.data;
+  return res.data;
 }
 
 async function getWaiBalance(wallet) {
   if (TEST_ACCESS_MODE) return 1000000;
-
-  if (!ethers.isAddress(WAI_CONTRACT_ADDRESS)) {
-    throw new Error("Invalid WAI contract");
-  }
 
   const token = new ethers.Contract(WAI_CONTRACT_ADDRESS, ERC20_ABI, provider);
   const decimals = await token.decimals();
@@ -162,6 +155,7 @@ async function checkAllHolders() {
 
     try {
       const balance = await getWaiBalance(user.wallet);
+
       user.lastBalance = balance;
       user.lastCheck = new Date().toISOString();
 
@@ -192,7 +186,7 @@ Required Minimum: ${MIN_WAI_ACCESS} WAI`
   if (changed) writeJson(USERS_FILE, users);
 }
 
-async function scanBaseWhaleTransfers() {
+async function scanBaseNativeWhales() {
   const latestBlock = await provider.getBlockNumber();
   const block = await provider.getBlock(latestBlock, true);
 
@@ -207,7 +201,7 @@ async function scanBaseWhaleTransfers() {
 
     const amount = Number(ethers.formatEther(tx.value || 0n));
 
-    if (amount < MIN_TRANSFER_ETH) continue;
+    if (amount < MIN_NATIVE_ETH) continue;
 
     await sendSignal(`
 🔵 <b>WHALE TRANSFER</b>
@@ -227,126 +221,183 @@ async function scanBaseWhaleTransfers() {
   writeJson(SEEN_FILE, seen);
 }
 
-async function scanBitqueryDexWhales() {
-  const query = `
-  {
-    EVM(network: base, dataset: realtime) {
-      DEXTrades(
-        limit: {count: 20}
-        orderBy: {descending: Block_Time}
-        where: {
-          any: [
-            {Trade: {Buy: {AmountInUSD: {gt: "${MIN_WHALE_USD}"}}}}
-            {Trade: {Sell: {AmountInUSD: {gt: "${MIN_WHALE_USD}"}}}}
-          ]
-        }
-      ) {
-        Block {
-          Time
-        }
-        Transaction {
-          Hash
-        }
-        Trade {
-          Dex {
-            ProtocolName
-          }
-          Buy {
-            Amount
-            AmountInUSD
-            Currency {
-              Symbol
-              SmartContract
-            }
-            Buyer
-          }
-          Sell {
-            Amount
-            AmountInUSD
-            Currency {
-              Symbol
-              SmartContract
-            }
-            Seller
-          }
-        }
-      }
+function normalizeSwap(item) {
+  const txHash =
+    item.transaction_hash ||
+    item.transactionHash ||
+    item.tx_hash ||
+    item.hash;
+
+  const wallet =
+    item.wallet_address ||
+    item.walletAddress ||
+    item.trader ||
+    item.user_address ||
+    item.maker ||
+    item.taker ||
+    item.from_address ||
+    item.from;
+
+  const pairAddress =
+    item.pair_address ||
+    item.pairAddress ||
+    item.pool_address ||
+    item.poolAddress;
+
+  const boughtSymbol =
+    item.bought?.symbol ||
+    item.buy?.symbol ||
+    item.token_bought_symbol ||
+    item.bought_symbol ||
+    item.to_token?.symbol;
+
+  const soldSymbol =
+    item.sold?.symbol ||
+    item.sell?.symbol ||
+    item.token_sold_symbol ||
+    item.sold_symbol ||
+    item.from_token?.symbol;
+
+  const boughtAmount =
+    item.bought?.amount ||
+    item.buy?.amount ||
+    item.amount_bought ||
+    item.bought_amount ||
+    item.to_token_amount;
+
+  const soldAmount =
+    item.sold?.amount ||
+    item.sell?.amount ||
+    item.amount_sold ||
+    item.sold_amount ||
+    item.from_token_amount;
+
+  const usd =
+    Number(
+      item.total_value_usd ||
+      item.value_usd ||
+      item.amount_usd ||
+      item.usd_value ||
+      item.transaction_value_usd ||
+      0
+    );
+
+  const dex =
+    item.exchange_name ||
+    item.dex_name ||
+    item.protocol ||
+    item.exchange ||
+    item.dex ||
+    "DEX";
+
+  return {
+    txHash,
+    wallet,
+    pairAddress,
+    boughtSymbol,
+    soldSymbol,
+    boughtAmount,
+    soldAmount,
+    usd,
+    dex
+  };
+}
+
+async function getTokenSwaps(token) {
+  const attempts = [
+    `/erc20/${token.address}/swaps`,
+    `/erc20/${token.address}/dex/swaps`,
+    `/erc20/${token.address}/trades`
+  ];
+
+  for (const path of attempts) {
+    try {
+      const data = await moralisGet(path, {
+        chain: token.chain,
+        limit: 50
+      });
+
+      if (Array.isArray(data)) return data;
+      if (Array.isArray(data.result)) return data.result;
+      if (Array.isArray(data.data)) return data.data;
+    } catch (err) {
+      console.log(`Moralis swap endpoint failed: ${path} | ${err.message}`);
     }
   }
-  `;
 
-  const data = await bitqueryRequest(query);
-  const trades = data?.EVM?.DEXTrades || [];
+  return [];
+}
 
+async function scanMoralisTokenSwaps() {
   const seen = readJson(SEEN_FILE, { txs: [] });
   const seenSet = new Set(seen.txs || []);
 
-  for (const item of trades) {
-    const hash = item.Transaction?.Hash;
-    if (!hash || seenSet.has(hash)) continue;
-    seenSet.add(hash);
+  for (const token of WATCH_TOKENS) {
+    const swaps = await getTokenSwaps(token);
 
-    const buy = item.Trade?.Buy || {};
-    const sell = item.Trade?.Sell || {};
-    const dex = item.Trade?.Dex?.ProtocolName || "DEX";
+    for (const raw of swaps) {
+      const s = normalizeSwap(raw);
 
-    const buySymbol = buy.Currency?.Symbol || "Unknown";
-    const sellSymbol = sell.Currency?.Symbol || "Unknown";
+      if (!s.txHash) continue;
+      if (seenSet.has(s.txHash)) continue;
+      seenSet.add(s.txHash);
 
-    const buyToken = buy.Currency?.SmartContract;
-    const sellToken = sell.Currency?.SmartContract;
+      if (s.usd > 0 && s.usd < MIN_WHALE_USD) continue;
 
-    const buyUsd = Number(buy.AmountInUSD || 0);
-    const sellUsd = Number(sell.AmountInUSD || 0);
+      const bought = String(s.boughtSymbol || "").toUpperCase();
+      const sold = String(s.soldSymbol || "").toUpperCase();
+      const watched = String(token.symbol || "").toUpperCase();
 
-    const buyer = buy.Buyer;
-    const seller = sell.Seller;
-
-    if (isStable(sellSymbol) && !isStable(buySymbol)) {
-      await sendSignal(`
+      if (bought === watched) {
+        await sendSignal(`
 🟢 <b>SMART MONEY BUY</b>
 
-<b>Token:</b> ${tokenLink(buyToken, buySymbol)}
+<b>Token:</b> ${tokenLink(token.address, token.symbol, token.explorer)}
 <b>Chain:</b> Base
-<b>DEX:</b> ${dex}
+<b>DEX:</b> ${s.dex}
 
-<b>Bought:</b> ${Number(buy.Amount || 0).toLocaleString()} ${buySymbol}
-<b>Value:</b> $${buyUsd.toLocaleString()}
+<b>Bought:</b> ${Number(s.boughtAmount || 0).toLocaleString()} ${token.symbol}
+<b>Sold:</b> ${Number(s.soldAmount || 0).toLocaleString()} ${s.soldSymbol || "Unknown"}
+${s.usd ? `<b>Value:</b> $${s.usd.toLocaleString()}` : ""}
 
-<b>Wallet:</b> ${walletLink(buyer)}
+<b>Wallet:</b> ${walletLink(s.wallet, token.explorer)}
+${s.pairAddress ? `<b>Pool:</b> ${walletLink(s.pairAddress, token.explorer)}` : ""}
 
-<b>Tx:</b> ${txLink(hash)}
+<b>Tx:</b> ${txLink(s.txHash, token.explorer)}
 `);
-    } else if (isStable(buySymbol) && !isStable(sellSymbol)) {
-      await sendSignal(`
+      } else if (sold === watched) {
+        await sendSignal(`
 🔴 <b>SMART MONEY SELL</b>
 
-<b>Token:</b> ${tokenLink(sellToken, sellSymbol)}
+<b>Token:</b> ${tokenLink(token.address, token.symbol, token.explorer)}
 <b>Chain:</b> Base
-<b>DEX:</b> ${dex}
+<b>DEX:</b> ${s.dex}
 
-<b>Sold:</b> ${Number(sell.Amount || 0).toLocaleString()} ${sellSymbol}
-<b>Value:</b> $${sellUsd.toLocaleString()}
+<b>Sold:</b> ${Number(s.soldAmount || 0).toLocaleString()} ${token.symbol}
+<b>Bought:</b> ${Number(s.boughtAmount || 0).toLocaleString()} ${s.boughtSymbol || "Unknown"}
+${s.usd ? `<b>Value:</b> $${s.usd.toLocaleString()}` : ""}
 
-<b>Wallet:</b> ${walletLink(seller)}
+<b>Wallet:</b> ${walletLink(s.wallet, token.explorer)}
+${s.pairAddress ? `<b>Pool:</b> ${walletLink(s.pairAddress, token.explorer)}` : ""}
 
-<b>Tx:</b> ${txLink(hash)}
+<b>Tx:</b> ${txLink(s.txHash, token.explorer)}
 `);
-    } else {
-      await sendSignal(`
+      } else {
+        await sendSignal(`
 🔁 <b>WHALE SWAP</b>
 
 <b>Chain:</b> Base
-<b>DEX:</b> ${dex}
+<b>DEX:</b> ${s.dex}
 
-<b>Sold:</b> ${Number(sell.Amount || 0).toLocaleString()} ${sellSymbol}
-<b>Bought:</b> ${Number(buy.Amount || 0).toLocaleString()} ${buySymbol}
-<b>Value:</b> $${Math.max(buyUsd, sellUsd).toLocaleString()}
+<b>Sold:</b> ${Number(s.soldAmount || 0).toLocaleString()} ${s.soldSymbol || "Unknown"}
+<b>Bought:</b> ${Number(s.boughtAmount || 0).toLocaleString()} ${s.boughtSymbol || "Unknown"}
+${s.usd ? `<b>Value:</b> $${s.usd.toLocaleString()}` : ""}
 
-<b>Wallet:</b> ${walletLink(buyer || seller)}
+<b>Wallet:</b> ${walletLink(s.wallet, token.explorer)}
 
-<b>Tx:</b> ${txLink(hash)}
+<b>Tx:</b> ${txLink(s.txHash, token.explorer)}
 `);
+      }
     }
   }
 
@@ -356,10 +407,10 @@ async function scanBitqueryDexWhales() {
 
 async function runSignals() {
   try {
-    await scanBaseWhaleTransfers();
+    await scanBaseNativeWhales();
 
-    if (BITQUERY_ENABLED) {
-      await scanBitqueryDexWhales();
+    if (MORALIS_ENABLED) {
+      await scanMoralisTokenSwaps();
     }
   } catch (err) {
     console.error("Signal scan error:", err.message);
@@ -470,9 +521,7 @@ Last Check: ${user.lastCheck || "Never"}
 });
 
 bot.onText(/\/status/, async (msg) => {
-  if (!isOwner(msg.chat.id)) {
-    return bot.sendMessage(msg.chat.id, "Access denied.");
-  }
+  if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
 
   const users = readJson(USERS_FILE, []);
   const active = users.filter(u => u.verified).length;
@@ -481,7 +530,7 @@ bot.onText(/\/status/, async (msg) => {
 🐋 WhaleSignals Admin Status
 
 Signals: ${signalsEnabled ? "ON ✅" : "OFF ❌"}
-Bitquery: ${BITQUERY_ENABLED ? "ON ✅" : "OFF ❌"}
+Moralis: ${MORALIS_ENABLED ? "ON ✅" : "OFF ❌"}
 
 Group ID: ${TELEGRAM_GROUP_ID}
 WAI Contract: ${WAI_CONTRACT_ADDRESS}
@@ -533,9 +582,10 @@ bot.onText(/\/testsignal/, async (msg) => {
 
 <b>Token:</b> WAI
 <b>Chain:</b> Base
-<b>DEX:</b> Aerodrome
+<b>DEX:</b> Demo DEX
 
 <b>Bought:</b> 25,000 WAI
+<b>Sold:</b> 75,000 USDC
 <b>Value:</b> $75,000
 
 <b>Wallet:</b> <a href="${BASESCAN_URL}/address/0x0000000000000000000000000000000000000000">Demo Wallet</a>
@@ -546,116 +596,71 @@ bot.onText(/\/testsignal/, async (msg) => {
   await bot.sendMessage(msg.chat.id, "✅ Demo signal sent.");
 });
 
-bot.onText(/\/bqtest/, async (msg) => {
+bot.onText(/\/mtest/, async (msg) => {
   if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
 
   try {
-    const query = `
-    {
-      EVM(network: base, dataset: realtime) {
-        Blocks(limit: {count: 1}) {
-          Block {
-            Number
-            Time
-          }
-        }
-      }
-    }
-    `;
-
-    const data = await bitqueryRequest(query);
+    const data = await moralisGet(`/erc20/${WAI_CONTRACT_ADDRESS}/price`, {
+      chain: "base"
+    });
 
     await bot.sendMessage(
       msg.chat.id,
-      `✅ Bitquery connected successfully.\n\n${JSON.stringify(data, null, 2)}`
+      `✅ Moralis connected successfully.
+
+${JSON.stringify(data, null, 2)}`
     );
   } catch (err) {
-    await bot.sendMessage(msg.chat.id, `❌ Bitquery test failed:\n${err.message}`);
+    await bot.sendMessage(msg.chat.id, `❌ Moralis test failed:\n${err.message}`);
   }
 });
 
 bot.onText(/\/flow24 (.+)/, async (msg, match) => {
   if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
 
-  const tokenAddress = match[1].trim().toLowerCase();
+  const tokenAddress = match[1].trim();
 
   if (!ethers.isAddress(tokenAddress)) {
     return bot.sendMessage(msg.chat.id, "Use: /flow24 TOKEN_CONTRACT_ADDRESS");
   }
 
   try {
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
-    const query = `
-    query Flow24($token: String!, $since: DateTime!) {
-      EVM(network: base, dataset: archive) {
-        DEXTrades(
-          limit: {count: 200}
-          orderBy: {descending: Block_Time}
-          where: {
-            Block: {Time: {since: $since}}
-            any: [
-              {Trade: {Buy: {Currency: {SmartContract: {is: $token}}}}}
-              {Trade: {Sell: {Currency: {SmartContract: {is: $token}}}}}
-            ]
-          }
-        ) {
-          Transaction { Hash }
-          Trade {
-            Buy {
-              Amount
-              AmountInUSD
-              Currency { Symbol SmartContract }
-            }
-            Sell {
-              Amount
-              AmountInUSD
-              Currency { Symbol SmartContract }
-            }
-          }
-        }
-      }
-    }
-    `;
-
-    const data = await bitqueryRequest(query, { token: tokenAddress, since });
-    const trades = data?.EVM?.DEXTrades || [];
+    const swaps = await getTokenSwaps({
+      symbol: "TOKEN",
+      chain: "base",
+      address: tokenAddress,
+      explorer: BASESCAN_URL
+    });
 
     let inflow = 0;
     let outflow = 0;
     let buys = 0;
     let sells = 0;
-    let symbol = "TOKEN";
 
-    for (const t of trades) {
-      const buy = t.Trade?.Buy || {};
-      const sell = t.Trade?.Sell || {};
+    for (const raw of swaps) {
+      const s = normalizeSwap(raw);
+      const bought = String(s.boughtSymbol || "").toUpperCase();
+      const sold = String(s.soldSymbol || "").toUpperCase();
 
-      const buyAddr = String(buy.Currency?.SmartContract || "").toLowerCase();
-      const sellAddr = String(sell.Currency?.SmartContract || "").toLowerCase();
-
-      if (buyAddr === tokenAddress) {
-        inflow += Number(buy.AmountInUSD || 0);
+      if (bought && bought !== "USDC" && bought !== "USDT") {
+        inflow += s.usd || 0;
         buys++;
-        symbol = buy.Currency?.Symbol || symbol;
       }
 
-      if (sellAddr === tokenAddress) {
-        outflow += Number(sell.AmountInUSD || 0);
+      if (sold && sold !== "USDC" && sold !== "USDT") {
+        outflow += s.usd || 0;
         sells++;
-        symbol = sell.Currency?.Symbol || symbol;
       }
     }
 
     const net = inflow - outflow;
     const trend = net > 0 ? "Accumulation 💰" : net < 0 ? "Distribution ⚠️" : "Neutral";
 
-    await bot.sendMessage(
-      msg.chat.id,
-      `📊 24H CASH FLOW
+    await bot.sendMessage(msg.chat.id, `
+📊 24H CASH FLOW
 
-Token: ${symbol}
 Chain: Base
+Token: ${shortWallet(tokenAddress)}
 
 🟢 Inflow: $${inflow.toLocaleString()}
 🔴 Outflow: $${outflow.toLocaleString()}
@@ -664,8 +669,8 @@ Chain: Base
 Buys: ${buys}
 Sells: ${sells}
 
-Trend: ${trend}`
-    );
+Trend: ${trend}
+`);
   } catch (err) {
     await bot.sendMessage(msg.chat.id, `❌ Flow24 failed:\n${err.message}`);
   }
@@ -682,8 +687,8 @@ bot.onText(/\/checkholders/, async (msg) => {
 setInterval(runSignals, CHECK_SIGNALS_INTERVAL_SECONDS * 1000);
 setInterval(checkAllHolders, CHECK_HOLDERS_INTERVAL_SECONDS * 1000);
 
-console.log("WhaleSignals Bot running...");
+console.log("WhaleSignals Moralis Bot running...");
 console.log("Owner:", OWNER_TELEGRAM_ID);
 console.log("Group:", TELEGRAM_GROUP_ID);
 console.log("Signals:", signalsEnabled);
-console.log("Bitquery:", BITQUERY_ENABLED);
+console.log("Moralis:", MORALIS_ENABLED);
