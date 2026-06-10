@@ -10,9 +10,9 @@ const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 const OWNER_TELEGRAM_ID = String(process.env.OWNER_TELEGRAM_ID || "1657654539");
 const TELEGRAM_GROUP_ID = String(process.env.TELEGRAM_GROUP_ID || "-1003819742117");
 
-let signalsEnabled = String(process.env.SIGNALS_ENABLED || "true") === "true";
+let signalsEnabled = String(process.env.SIGNALS_ENABLED || "true").toLowerCase() === "true";
 
-const MORALIS_ENABLED = String(process.env.MORALIS_ENABLED || "true") === "true";
+const MORALIS_ENABLED = String(process.env.MORALIS_ENABLED || "true").toLowerCase() === "true";
 const MORALIS_API_KEY = process.env.MORALIS_API_KEY || "";
 const MORALIS_BASE_URL = "https://deep-index.moralis.io/api/v2.2";
 
@@ -56,7 +56,6 @@ const MARKETS = {
   BTC: {
     display: "BTC",
     emoji: "🟠",
-    chainEmoji: "🟠",
     chainLabel: "BITCOIN",
     gecko: "bitcoin",
     minUsd: Number(process.env.MIN_BTC_USD || 50000),
@@ -65,7 +64,6 @@ const MARKETS = {
   ETH: {
     display: "ETH",
     emoji: "🔵",
-    chainEmoji: "🔵",
     chainLabel: "ETHEREUM",
     gecko: "ethereum",
     minUsd: Number(process.env.MIN_ETH_USD || 50000),
@@ -79,7 +77,6 @@ const MARKETS = {
   BNB: {
     display: "BNB",
     emoji: "🟡",
-    chainEmoji: "🟡",
     chainLabel: "BNB CHAIN",
     gecko: "binancecoin",
     minUsd: Number(process.env.MIN_BNB_USD || 30000),
@@ -93,7 +90,6 @@ const MARKETS = {
   AVAX: {
     display: "AVAX",
     emoji: "🔺",
-    chainEmoji: "🔴",
     chainLabel: "AVALANCHE",
     gecko: "avalanche-2",
     minUsd: Number(process.env.MIN_AVAX_USD || 30000),
@@ -107,7 +103,6 @@ const MARKETS = {
   MATIC: {
     display: "MATIC/POL",
     emoji: "🟣",
-    chainEmoji: "🟣",
     chainLabel: "POLYGON",
     gecko: "polygon-ecosystem-token",
     minUsd: Number(process.env.MIN_MATIC_USD || 30000),
@@ -149,22 +144,22 @@ function writeJson(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2));
 }
 
-function shortWallet(address) {
-  if (!address || address === "N/A") return "N/A";
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+function shortHash(value) {
+  if (!value || value === "N/A") return "Unknown";
+  return `${String(value).slice(0, 6)}...${String(value).slice(-4)}`;
 }
 
 function walletLink(address, explorer) {
-  if (!address || address === "N/A") return "N/A";
-  return `<a href="${explorer}/address/${address}">${shortWallet(address)}</a>`;
+  if (!address || address === "N/A") return "Unknown Wallet";
+  return `<a href="${explorer}/address/${address}">${shortHash(address)}</a>`;
 }
 
 function txLink(hash, explorer) {
-  return `<a href="${explorer}/tx/${hash}">TX</a>`;
+  return `<a href="${explorer}/tx/${hash}">${shortHash(hash)}</a>`;
 }
 
 function btcTxLink(hash) {
-  return `<a href="https://mempool.space/tx/${hash}">TX</a>`;
+  return `<a href="https://mempool.space/tx/${hash}">${shortHash(hash)}</a>`;
 }
 
 function nowIso() {
@@ -187,17 +182,20 @@ function formatPct(value) {
 function whaleClass(usdValue) {
   const v = Number(usdValue || 0);
   if (v >= 1000000) return "🦈 GIANT WHALE";
-  if (v >= 250000) return "🐳 MEGA WHALE";
+  if (v >= 500000) return "🐳 MEGA WHALE";
   return "🐋 WHALE";
 }
 
-function marketBias(change24h, netFlow = 0) {
-  const change = Number(change24h || 0);
-  if (change >= 2) return "Bullish 🟢";
-  if (change <= -2) return "Bearish 🔴";
-  if (netFlow > 100000) return "Accumulation 💰";
-  if (netFlow < -100000) return "Distribution ⚠️";
-  return "Neutral ⚪";
+function sideLabel(side) {
+  if (side === "BUY") return "BUY";
+  if (side === "SELL") return "SELL";
+  return "TRANSFER";
+}
+
+function sideEmoji(side) {
+  if (side === "BUY") return "🟢";
+  if (side === "SELL") return "🔴";
+  return "🟡";
 }
 
 function signalStrength(usdValue) {
@@ -208,25 +206,16 @@ function signalStrength(usdValue) {
   return "6/10";
 }
 
-function signalTitle(side, usdValue) {
-  if (side === "BUY") {
-    if (usdValue >= 1000000) return "🚨 WHALE ENTRY";
-    if (usdValue >= 250000) return "💰 ACCUMULATION";
-    return "🟢 SMART MONEY BUY";
-  }
+function marketBias(change24h, netFlow, volume) {
+  const c = Number(change24h || 0);
+  const n = Number(netFlow || 0);
+  const v = Number(volume || 0);
 
-  if (side === "SELL") {
-    if (usdValue >= 1000000) return "⚠️ WHALE EXIT";
-    return "🔴 SMART MONEY SELL";
-  }
-
-  if (side === "TRANSFER") {
-    if (usdValue >= 1000000) return "🚨 WHALE TRANSFER";
-    if (usdValue >= 500000) return "💰 LARGE TRANSFER";
-    return "🟡 WHALE TRANSFER";
-  }
-
-  return "🐋 WHALE SIGNAL";
+  if (n > 250000 && c > -5) return "Accumulation 🟢";
+  if (n < -250000) return "Distribution 🔴";
+  if (c >= 2) return "Bullish 🟢";
+  if (c <= -2 && v < 100000) return "Bearish 🔴";
+  return "Neutral ⚪";
 }
 
 function addFlow(asset, side, amount, usdValue, price, source, txId) {
@@ -259,16 +248,15 @@ function getAssetFlow(asset, hours) {
   const inflow = rows.filter(x => x.side === "BUY").reduce((s, x) => s + Number(x.usdValue || 0), 0);
   const outflow = rows.filter(x => x.side === "SELL").reduce((s, x) => s + Number(x.usdValue || 0), 0);
   const transfer = rows.filter(x => x.side === "TRANSFER").reduce((s, x) => s + Number(x.usdValue || 0), 0);
+  const volume = inflow + outflow + transfer;
 
   return {
     asset,
     inflow,
     outflow,
     transfer,
+    volume,
     net: inflow - outflow,
-    buys: rows.filter(x => x.side === "BUY").length,
-    sells: rows.filter(x => x.side === "SELL").length,
-    transfers: rows.filter(x => x.side === "TRANSFER").length,
     txCount: rows.length
   };
 }
@@ -293,50 +281,33 @@ function compactSignalMessage({
   price,
   change24h,
   wallet,
-  tx,
-  avgBuy,
-  pnl
+  tx
 }) {
   const m = MARKETS[asset];
-  const title = signalTitle(side, usdValue);
-
   const amountText = `${Number(amount || 0).toLocaleString(undefined, {
     maximumFractionDigits: 4
   })} ${m.display}`;
 
   const changeEmoji = Number(change24h || 0) >= 0 ? "📈" : "📉";
-
-  let extra = "";
-
-  if (side === "BUY") {
-    extra = `
-📊 Avg Entry: ${avgBuy || "Estimating"}
-📌 Est. PnL: ${pnl || "0.00%"}
-`;
-  }
-
-  if (side === "SELL") {
-    extra = `
-📊 Exit: ${formatUsd(price)}
-📌 Sell Signal
-`;
-  }
+  const flow = getAssetFlow(asset, 24);
+  const netText = flow.net >= 0 ? `+${formatUsd(flow.net)}` : formatUsd(flow.net);
 
   return `
-${title}
-${m.chainEmoji} <b>${m.chainLabel}</b>
+${sideEmoji(side)} <b>${sideLabel(side)}</b> | ${m.emoji} <b>${m.chainLabel}</b>
 ${whaleClass(usdValue)}
 
-${m.emoji} <b>${m.display}</b>
+🔗 TX: ${tx}
+👛 Wallet: ${wallet}
+
+<b>${m.display}</b>
 💰 ${formatUsd(usdValue)}
 🐋 ${amountText}
 
 💵 ${formatUsd(price)}
 ${changeEmoji} ${formatPct(change24h)}
 🔥 ${signalStrength(usdValue)}
-${extra}
-👛 ${wallet}
-🔗 ${tx}
+
+🌊 24H Flow: ${netText}
 `;
 }
 
@@ -365,7 +336,7 @@ async function updateLivePrices() {
       };
     }
 
-    console.log("Live CoinGecko prices updated.");
+    console.log("Live prices updated.");
   } catch (err) {
     console.error("Price update error:", err.message);
   }
@@ -419,7 +390,7 @@ async function checkAllHolders() {
           user.telegramId,
           `❌ Access Revoked
 
-Wallet: ${shortWallet(user.wallet)}
+Wallet: ${shortHash(user.wallet)}
 Current Balance: ${balance} WAI
 Required Minimum: ${MIN_WAI_ACCESS} WAI`
         );
@@ -524,7 +495,6 @@ async function scanMoralisSwaps(asset) {
       let side = "TRANSFER";
       if (type === "buy") side = "BUY";
       if (type === "sell") side = "SELL";
-
       if (side === "TRANSFER") continue;
 
       const usdValue = extractMoralisUsd(s);
@@ -544,9 +514,6 @@ async function scanMoralisSwaps(asset) {
 
       const wallet = extractMoralisWallet(s);
 
-      const avgBuy = side === "BUY" ? formatUsd(price) : "";
-      const pnl = side === "BUY" ? "+0.00%" : "";
-
       addFlow(asset, side, amount, usdValue, price, s.exchangeName || s.exchange_name || "DEX", hash);
 
       await sendSignal(
@@ -558,9 +525,7 @@ async function scanMoralisSwaps(asset) {
           price,
           change24h: livePrices[asset].change24h,
           wallet: walletLink(wallet, market.explorer),
-          tx: txLink(hash, market.explorer),
-          avgBuy,
-          pnl
+          tx: txLink(hash, market.explorer)
         })
       );
     }
@@ -596,7 +561,7 @@ async function scanBTCTransfers() {
       if (!price || usdValue < market.minUsd) continue;
       if (usdValue > 1000000000) continue;
 
-      addFlow("BTC", "TRANSFER", amount, usdValue, price, "Bitcoin Mempool", tx.txid);
+      addFlow("BTC", "TRANSFER", amount, usdValue, price, "Bitcoin Network", tx.txid);
 
       await sendSignal(
         compactSignalMessage({
@@ -606,7 +571,7 @@ async function scanBTCTransfers() {
           usdValue,
           price,
           change24h: livePrices.BTC.change24h,
-          wallet: "BTC Mempool",
+          wallet: "Bitcoin Network",
           tx: btcTxLink(tx.txid)
         })
       );
@@ -697,9 +662,12 @@ function buildFlowReport(hours) {
   for (const asset of Object.keys(MARKETS)) {
     const f = getAssetFlow(asset, hours);
     const m = MARKETS[asset];
-    const flowText = f.net >= 0 ? `+${formatUsd(f.net)}` : formatUsd(f.net);
 
-    text += `${m.emoji} <b>${m.display}</b> ${flowText}\n`;
+    const volumeText = formatUsd(f.volume);
+    const netText = f.net >= 0 ? `+${formatUsd(f.net)}` : formatUsd(f.net);
+
+    text += `${m.emoji} <b>${m.display}</b>\n`;
+    text += `Volume: ${volumeText} | Net: ${netText}\n\n`;
   }
 
   return text;
@@ -710,15 +678,21 @@ function buildTopReport(hours, type) {
     .map(asset => getAssetFlow(asset, hours))
     .sort((a, b) => {
       if (type === "inflow") return b.inflow - a.inflow;
-      return b.outflow - a.outflow;
+      if (type === "outflow") return b.outflow - a.outflow;
+      return b.volume - a.volume;
     })
     .slice(0, 5);
 
-  let text = type === "inflow" ? `🏆 <b>TOP INFLOW</b>\n\n` : `📉 <b>TOP OUTFLOW</b>\n\n`;
+  let text =
+    type === "inflow"
+      ? `🏆 <b>TOP INFLOW ${hours}H</b>\n\n`
+      : type === "outflow"
+        ? `📉 <b>TOP OUTFLOW ${hours}H</b>\n\n`
+        : `📊 <b>TOP VOLUME ${hours}H</b>\n\n`;
 
   rows.forEach((r, i) => {
     const m = MARKETS[r.asset];
-    const value = type === "inflow" ? r.inflow : r.outflow;
+    const value = type === "inflow" ? r.inflow : type === "outflow" ? r.outflow : r.volume;
     text += `${i + 1}. ${m.emoji} <b>${m.display}</b> ${formatUsd(value)}\n`;
   });
 
@@ -729,21 +703,24 @@ function buildSummary() {
   let text = `📊 <b>MARKET SUMMARY</b>\n\n`;
 
   let totalNet = 0;
+  let totalVolume = 0;
   let whaleCount = 0;
 
   for (const asset of Object.keys(MARKETS)) {
     const f = getAssetFlow(asset, 24);
     const p = livePrices[asset];
-    const bias = marketBias(p.change24h, f.net);
+    const bias = marketBias(p.change24h, f.net, f.volume);
     const m = MARKETS[asset];
 
     totalNet += f.net;
+    totalVolume += f.volume;
     whaleCount += f.txCount;
 
     text += `${m.emoji} <b>${m.display}</b> → ${bias}\n`;
   }
 
-  text += `\n🌊 Flow: ${totalNet >= 0 ? "+" : ""}${formatUsd(totalNet)}\n`;
+  text += `\n🌊 Volume: ${formatUsd(totalVolume)}\n`;
+  text += `📌 Net: ${totalNet >= 0 ? "+" : ""}${formatUsd(totalNet)}\n`;
   text += `🐋 Activity: ${whaleCount} signals\n`;
 
   return text;
@@ -791,7 +768,7 @@ bot.onText(/\/verify (.+)/, async (msg, match) => {
         msg.chat.id,
         `❌ Access Denied
 
-Wallet: ${shortWallet(wallet)}
+Wallet: ${shortHash(wallet)}
 Balance: ${balance} WAI
 Required Minimum: ${MIN_WAI_ACCESS} WAI`
       );
@@ -820,13 +797,14 @@ Required Minimum: ${MIN_WAI_ACCESS} WAI`
       msg.chat.id,
       `✅ Access Granted
 
-Wallet: ${shortWallet(wallet)}
+Wallet: ${shortHash(wallet)}
 Balance: ${balance} WAI
 
 VIP Group Invite:
 ${inviteLink}
 
-This invite link is valid for 10 minutes and can be used once.`
+Valid: 10 minutes
+Uses: 1`
     );
   } catch (err) {
     console.error(err);
@@ -845,7 +823,7 @@ bot.onText(/\/myaccess/, async (msg) => {
 🐋 WhaleSignals VIP Access
 
 Status: ${user.verified ? "ACTIVE ✅" : "INACTIVE ❌"}
-Wallet: ${shortWallet(user.wallet)}
+Wallet: ${shortHash(user.wallet)}
 Last Balance: ${user.lastBalance} WAI
 Last Check: ${user.lastCheck || "Never"}
 `);
@@ -861,20 +839,15 @@ bot.onText(/\/markets/, async (msg) => {
 ✅ AVAX
 ✅ MATIC/POL
 
-Chains:
-🔵 Ethereum
-🟡 BNB Chain
-🟣 Polygon
-🔷 Base
-⚫ Arbitrum
-
 Signals:
-🟢 Smart Money Buy
-🔴 Smart Money Sell
-🟡 Whale Transfer
-💰 Accumulation
-🚨 Whale Entry
-⚠️ Whale Exit
+🟢 BUY
+🔴 SELL
+🟡 TRANSFER
+
+Whale Levels:
+🐋 Whale: $50K+
+🐳 Mega Whale: $500K+
+🦈 Giant Whale: $1M+
 
 Commands:
 /prices
@@ -903,11 +876,12 @@ bot.onText(/\/price (.+)/, async (msg, match) => {
   await bot.sendMessage(msg.chat.id, `
 📊 <b>${m.display}</b>
 
-${m.chainEmoji} ${m.chainLabel}
+${m.emoji} ${m.chainLabel}
 💵 ${formatUsd(p.price)}
 ${Number(p.change24h || 0) >= 0 ? "📈" : "📉"} ${formatPct(p.change24h)}
-🌊 ${f.net >= 0 ? "+" : ""}${formatUsd(f.net)}
-${marketBias(p.change24h, f.net)}
+🌊 Volume: ${formatUsd(f.volume)}
+📌 Net: ${f.net >= 0 ? "+" : ""}${formatUsd(f.net)}
+${marketBias(p.change24h, f.net, f.volume)}
 `, { parse_mode: "HTML" });
 });
 
@@ -1011,7 +985,7 @@ setInterval(checkAllHolders, CHECK_HOLDERS_INTERVAL_SECONDS * 1000);
 setInterval(() => postFlowReport(12), FLOW12_INTERVAL_SECONDS * 1000);
 setInterval(() => postFlowReport(24), FLOW24_INTERVAL_SECONDS * 1000);
 
-console.log("WhaleSignals Real Swap Bot running...");
+console.log("WhaleSignals Bot running...");
 console.log("Markets: BTC ETH BNB AVAX MATIC/POL");
 console.log("Prices: CoinGecko");
 console.log("Moralis DEX:", MORALIS_ENABLED && !!MORALIS_API_KEY);
