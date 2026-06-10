@@ -4,6 +4,7 @@ const TelegramBot = require("node-telegram-bot-api");
 const axios = require("axios");
 const fs = require("fs");
 const { ethers } = require("ethers");
+const { createCanvas, GlobalFonts } = require("@napi-rs/canvas");
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 
@@ -55,7 +56,8 @@ const ERC20_ABI = [
 const MARKETS = {
   BTC: {
     display: "BTC",
-    emoji: "🟠",
+    color: "#F7931A",
+    symbolIcon: "₿",
     chainLabel: "BITCOIN",
     gecko: "bitcoin",
     minUsd: Number(process.env.MIN_BTC_USD || 50000),
@@ -63,7 +65,8 @@ const MARKETS = {
   },
   ETH: {
     display: "ETH",
-    emoji: "🔵",
+    color: "#111111",
+    symbolIcon: "♦",
     chainLabel: "ETHEREUM",
     gecko: "ethereum",
     minUsd: Number(process.env.MIN_ETH_USD || 50000),
@@ -76,7 +79,8 @@ const MARKETS = {
   },
   BNB: {
     display: "BNB",
-    emoji: "🟡",
+    color: "#F3BA2F",
+    symbolIcon: "◆",
     chainLabel: "BNB CHAIN",
     gecko: "binancecoin",
     minUsd: Number(process.env.MIN_BNB_USD || 30000),
@@ -89,7 +93,8 @@ const MARKETS = {
   },
   AVAX: {
     display: "AVAX",
-    emoji: "🔺",
+    color: "#E84142",
+    symbolIcon: "▲",
     chainLabel: "AVALANCHE",
     gecko: "avalanche-2",
     minUsd: Number(process.env.MIN_AVAX_USD || 30000),
@@ -102,7 +107,8 @@ const MARKETS = {
   },
   MATIC: {
     display: "MATIC/POL",
-    emoji: "🟣",
+    color: "#8247E5",
+    symbolIcon: "∞",
     chainLabel: "POLYGON",
     gecko: "polygon-ecosystem-token",
     minUsd: Number(process.env.MIN_MATIC_USD || 30000),
@@ -146,20 +152,9 @@ function writeJson(file, data) {
 
 function shortHash(value) {
   if (!value || value === "N/A") return "Unknown";
-  return `${String(value).slice(0, 6)}...${String(value).slice(-4)}`;
-}
-
-function walletLink(address, explorer) {
-  if (!address || address === "N/A") return "Unknown Wallet";
-  return `<a href="${explorer}/address/${address}">${shortHash(address)}</a>`;
-}
-
-function txLink(hash, explorer) {
-  return `<a href="${explorer}/tx/${hash}">${shortHash(hash)}</a>`;
-}
-
-function btcTxLink(hash) {
-  return `<a href="https://mempool.space/tx/${hash}">${shortHash(hash)}</a>`;
+  const s = String(value);
+  if (s.length <= 12) return s;
+  return `${s.slice(0, 6)}...${s.slice(-4)}`;
 }
 
 function nowIso() {
@@ -179,23 +174,22 @@ function formatPct(value) {
   return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
 }
 
+function formatAmount(value, maxDecimals = 4) {
+  const n = Number(value || 0);
+  return n.toLocaleString(undefined, { maximumFractionDigits: maxDecimals });
+}
+
 function whaleClass(usdValue) {
   const v = Number(usdValue || 0);
-  if (v >= 1000000) return "🦈 GIANT WHALE";
-  if (v >= 500000) return "🐳 MEGA WHALE";
-  return "🐋 WHALE";
+  if (v >= 1000000) return { label: "GIANT WHALE", icon: "🦈" };
+  if (v >= 500000) return { label: "MEGA WHALE", icon: "🐳" };
+  return { label: "WHALE", icon: "🐋" };
 }
 
-function sideLabel(side) {
-  if (side === "BUY") return "BUY";
-  if (side === "SELL") return "SELL";
-  return "TRANSFER";
-}
-
-function sideEmoji(side) {
-  if (side === "BUY") return "🟢";
-  if (side === "SELL") return "🔴";
-  return "🟡";
+function sideConfig(side) {
+  if (side === "BUY") return { label: "BUY", color: "#22C55E", icon: "●" };
+  if (side === "SELL") return { label: "SELL", color: "#EF4444", icon: "●" };
+  return { label: "TRANSFER", color: "#FACC15", icon: "●" };
 }
 
 function signalStrength(usdValue) {
@@ -211,11 +205,11 @@ function marketBias(change24h, netFlow, volume) {
   const n = Number(netFlow || 0);
   const v = Number(volume || 0);
 
-  if (n > 250000 && c > -5) return "Accumulation 🟢";
-  if (n < -250000) return "Distribution 🔴";
-  if (c >= 2) return "Bullish 🟢";
-  if (c <= -2 && v < 100000) return "Bearish 🔴";
-  return "Neutral ⚪";
+  if (n > 250000 && c > -5) return { text: "Accumulation", color: "#22C55E" };
+  if (n < -250000) return { text: "Distribution", color: "#EF4444" };
+  if (c >= 2) return { text: "Bullish", color: "#22C55E" };
+  if (c <= -2 && v < 100000) return { text: "Bearish", color: "#EF4444" };
+  return { text: "Neutral", color: "#E5E7EB" };
 }
 
 function addFlow(asset, side, amount, usdValue, price, source, txId) {
@@ -261,6 +255,272 @@ function getAssetFlow(asset, hours) {
   };
 }
 
+function gradient(ctx, x, y, w, h, c1, c2) {
+  const g = ctx.createLinearGradient(x, y, x + w, y + h);
+  g.addColorStop(0, c1);
+  g.addColorStop(1, c2);
+  return g;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.lineTo(x + w - rr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+  ctx.lineTo(x + w, y + h - rr);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+  ctx.lineTo(x + rr, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+  ctx.lineTo(x, y + rr);
+  ctx.quadraticCurveTo(x, y, x + rr, y);
+  ctx.closePath();
+}
+
+function drawCircleToken(ctx, x, y, size, color, text, textColor = "#FFFFFF") {
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = textColor;
+  ctx.font = `900 ${Math.floor(size * 0.52)}px Arial`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, x + size / 2, y + size / 2 + 1);
+  ctx.restore();
+}
+
+function drawLabel(ctx, text, x, y, color, bg) {
+  ctx.font = "900 28px Arial";
+  const padX = 18;
+  const w = ctx.measureText(text).width + padX * 2;
+  const h = 42;
+  ctx.fillStyle = bg;
+  roundRect(ctx, x, y - 31, w, h, 12);
+  ctx.fill();
+  ctx.fillStyle = color;
+  ctx.fillText(text, x + padX, y);
+  return w;
+}
+function createSignalCard(data) {
+  const market = MARKETS[data.asset] || MARKETS.ETH;
+  const side = sideConfig(data.side);
+  const whale = whaleClass(data.usdValue);
+  const change = Number(data.change24h || 0);
+  const isPositive = change >= 0;
+
+  const width = 1200;
+  const height = 520;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = gradient(ctx, 0, 0, width, height, "#07111F", "#111827");
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.globalAlpha = 0.12;
+  ctx.fillStyle = market.color;
+  ctx.beginPath();
+  ctx.arc(1050, 70, 280, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  ctx.fillStyle = gradient(ctx, 35, 35, width - 70, height - 70, "#101B2B", "#172338");
+  roundRect(ctx, 35, 35, width - 70, height - 70, 34);
+  ctx.fill();
+
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.35)";
+  ctx.lineWidth = 2;
+  roundRect(ctx, 35, 35, width - 70, height - 70, 34);
+  ctx.stroke();
+
+  drawCircleToken(ctx, 75, 70, 54, market.color, market.symbolIcon, "#FFFFFF");
+
+  ctx.fillStyle = "#F8FAFC";
+  ctx.font = "900 38px Arial";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText(data.asset, 145, 110);
+
+  ctx.fillStyle = "#64748B";
+  ctx.font = "700 34px Arial";
+  ctx.fillText("|", 235, 110);
+
+  ctx.fillStyle = side.color;
+  ctx.font = "900 32px Arial";
+  ctx.fillText(`${side.icon} ${side.label}`, 265, 110);
+
+  ctx.fillStyle = "#94A3B8";
+  ctx.font = "700 24px Arial";
+  ctx.fillText(market.chainLabel, 145, 148);
+
+  ctx.fillStyle = "#CBD5E1";
+  ctx.font = "700 24px Arial";
+  ctx.textAlign = "right";
+  ctx.fillText(
+    new Date().toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit"
+    }),
+    width - 75,
+    110
+  );
+  ctx.textAlign = "left";
+
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.28)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(75, 180);
+  ctx.lineTo(width - 75, 180);
+  ctx.stroke();
+
+  ctx.fillStyle = "#F8FAFC";
+  ctx.font = "900 54px Arial";
+  ctx.fillText(formatUsd(data.usdValue), 75, 255);
+
+  ctx.fillStyle = "#E2E8F0";
+  ctx.font = "700 34px Arial";
+  ctx.fillText(`${formatAmount(data.amount, 4)} ${data.asset}`, 75, 305);
+
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.25)";
+  ctx.beginPath();
+  ctx.moveTo(490, 215);
+  ctx.lineTo(490, 330);
+  ctx.stroke();
+
+  ctx.fillStyle = "#E2E8F0";
+  ctx.font = "800 34px Arial";
+  ctx.fillText(formatUsd(data.price), 555, 250);
+
+  ctx.fillStyle = isPositive ? "#22C55E" : "#EF4444";
+  ctx.font = "900 34px Arial";
+  ctx.fillText(formatPct(data.change24h), 555, 300);
+
+  drawLabel(ctx, `🔥 ${signalStrength(data.usdValue)}`, 810, 250, "#FFFFFF", "rgba(249, 115, 22, 0.22)");
+  drawLabel(ctx, `${whale.icon} ${whale.label}`, 810, 310, "#FFFFFF", "rgba(59, 130, 246, 0.18)");
+
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.28)";
+  ctx.beginPath();
+  ctx.moveTo(75, 365);
+  ctx.lineTo(width - 75, 365);
+  ctx.stroke();
+
+  ctx.fillStyle = "#CBD5E1";
+  ctx.font = "700 28px Arial";
+  ctx.fillText("TX:", 75, 420);
+
+  ctx.fillStyle = "#7C9DFF";
+  ctx.font = "800 28px Arial";
+  ctx.fillText(shortHash(data.txHash), 125, 420);
+
+  ctx.fillStyle = "#CBD5E1";
+  ctx.font = "700 28px Arial";
+  ctx.fillText("Wallet:", 560, 420);
+
+  ctx.fillStyle = "#7C9DFF";
+  ctx.font = "800 28px Arial";
+  ctx.fillText(shortHash(data.walletRaw || "Bitcoin Network"), 660, 420);
+
+  ctx.fillStyle = "#64748B";
+  ctx.font = "700 22px Arial";
+  ctx.textAlign = "right";
+  ctx.fillText("WhaleSignalsAI", width - 75, 460);
+
+  return canvas.toBuffer("image/png");
+}
+
+function createSummaryCard(hours = 24) {
+  const width = 1200;
+  const height = 520;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = gradient(ctx, 0, 0, width, height, "#07111F", "#111827");
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.fillStyle = gradient(ctx, 35, 35, width - 70, height - 70, "#101B2B", "#172338");
+  roundRect(ctx, 35, 35, width - 70, height - 70, 34);
+  ctx.fill();
+
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.35)";
+  ctx.lineWidth = 2;
+  roundRect(ctx, 35, 35, width - 70, height - 70, 34);
+  ctx.stroke();
+
+  ctx.fillStyle = "#F8FAFC";
+  ctx.font = "900 42px Arial";
+  ctx.fillText(`MARKET SUMMARY ${hours}H`, 75, 105);
+
+  ctx.fillStyle = "#94A3B8";
+  ctx.font = "700 24px Arial";
+  ctx.fillText(
+    `Update: ${new Date().toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit"
+    })}`,
+    75,
+    142
+  );
+
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.28)";
+  ctx.beginPath();
+  ctx.moveTo(75, 170);
+  ctx.lineTo(width - 75, 170);
+  ctx.stroke();
+
+  let x = 75;
+  let y = 235;
+  let totalVolume = 0;
+  let totalNet = 0;
+  let totalActivity = 0;
+
+  for (const asset of Object.keys(MARKETS)) {
+    const m = MARKETS[asset];
+    const f = getAssetFlow(asset, hours);
+    const p = livePrices[asset] || {};
+    const bias = marketBias(p.change24h, f.net, f.volume);
+
+    totalVolume += f.volume;
+    totalNet += f.net;
+    totalActivity += f.txCount;
+
+    drawCircleToken(ctx, x, y - 36, 38, m.color, m.symbolIcon);
+
+    ctx.fillStyle = "#F8FAFC";
+    ctx.font = "900 28px Arial";
+    ctx.fillText(m.display, x + 52, y - 7);
+
+    ctx.fillStyle = bias.color;
+    ctx.font = "900 24px Arial";
+    ctx.fillText(bias.text, x + 52, y + 28);
+
+    ctx.fillStyle = "#CBD5E1";
+    ctx.font = "700 22px Arial";
+    ctx.fillText(formatUsd(f.volume), x, y + 72);
+
+    x += 220;
+  }
+
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.28)";
+  ctx.beginPath();
+  ctx.moveTo(75, 360);
+  ctx.lineTo(width - 75, 360);
+  ctx.stroke();
+
+  ctx.fillStyle = "#CBD5E1";
+  ctx.font = "800 30px Arial";
+  ctx.fillText(`Volume: ${formatUsd(totalVolume)}`, 75, 425);
+
+  ctx.fillStyle = totalNet >= 0 ? "#22C55E" : "#EF4444";
+  ctx.fillText(`Net: ${totalNet >= 0 ? "+" : ""}${formatUsd(totalNet)}`, 430, 425);
+
+  ctx.fillStyle = "#CBD5E1";
+  ctx.fillText(`Activity: ${totalActivity} signals`, 745, 425);
+
+  return canvas.toBuffer("image/png");
+}
+
 async function sendGroup(text) {
   await bot.sendMessage(TELEGRAM_GROUP_ID, text, {
     parse_mode: "HTML",
@@ -268,47 +528,37 @@ async function sendGroup(text) {
   });
 }
 
-async function sendSignal(text) {
+async function sendSignalCard(data) {
   if (!signalsEnabled) return;
-  await sendGroup(text);
+
+  try {
+    const buffer = createSignalCard(data);
+    const caption = `${data.asset} ${data.side} | ${formatUsd(data.usdValue)}`;
+
+    await bot.sendPhoto(TELEGRAM_GROUP_ID, buffer, {
+      caption,
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "🔗 TX", url: data.txUrl },
+            { text: "👛 Wallet", url: data.walletUrl || data.txUrl }
+          ]
+        ]
+      }
+    });
+  } catch (err) {
+    console.error("sendSignalCard error:", err.message);
+  }
 }
 
-function compactSignalMessage({
-  asset,
-  side,
-  amount,
-  usdValue,
-  price,
-  change24h,
-  wallet,
-  tx
-}) {
-  const m = MARKETS[asset];
-  const amountText = `${Number(amount || 0).toLocaleString(undefined, {
-    maximumFractionDigits: 4
-  })} ${m.display}`;
+async function sendSummaryCard(hours = 24) {
+  const buffer = createSummaryCard(hours);
 
-  const changeEmoji = Number(change24h || 0) >= 0 ? "📈" : "📉";
-  const flow = getAssetFlow(asset, 24);
-  const netText = flow.net >= 0 ? `+${formatUsd(flow.net)}` : formatUsd(flow.net);
-
-  return `
-${sideEmoji(side)} <b>${sideLabel(side)}</b> | ${m.emoji} <b>${m.chainLabel}</b>
-${whaleClass(usdValue)}
-
-🔗 TX: ${tx}
-👛 Wallet: ${wallet}
-
-<b>${m.display}</b>
-💰 ${formatUsd(usdValue)}
-🐋 ${amountText}
-
-💵 ${formatUsd(price)}
-${changeEmoji} ${formatPct(change24h)}
-🔥 ${signalStrength(usdValue)}
-
-🌊 24H Flow: ${netText}
-`;
+  await bot.sendPhoto(TELEGRAM_GROUP_ID, buffer, {
+    caption: `Market Summary ${hours}H`,
+    parse_mode: "HTML"
+  });
 }
 
 async function updateLivePrices() {
@@ -457,7 +707,6 @@ function extractMoralisAmount(s, side, price, usdValue) {
 
   return 0;
 }
-
 async function scanMoralisSwaps(asset) {
   if (!MORALIS_ENABLED || !MORALIS_API_KEY) return;
 
@@ -514,20 +763,31 @@ async function scanMoralisSwaps(asset) {
 
       const wallet = extractMoralisWallet(s);
 
-      addFlow(asset, side, amount, usdValue, price, s.exchangeName || s.exchange_name || "DEX", hash);
-
-      await sendSignal(
-        compactSignalMessage({
-          asset,
-          side,
-          amount,
-          usdValue,
-          price,
-          change24h: livePrices[asset].change24h,
-          wallet: walletLink(wallet, market.explorer),
-          tx: txLink(hash, market.explorer)
-        })
+      addFlow(
+        asset,
+        side,
+        amount,
+        usdValue,
+        price,
+        s.exchangeName || s.exchange_name || "DEX",
+        hash
       );
+
+      await sendSignalCard({
+        asset,
+        side,
+        amount,
+        usdValue,
+        price,
+        change24h: livePrices[asset].change24h,
+        txHash: hash,
+        walletRaw: wallet,
+        txUrl: `${market.explorer}/tx/${hash}`,
+        walletUrl:
+          wallet && wallet !== "N/A"
+            ? `${market.explorer}/address/${wallet}`
+            : `${market.explorer}/tx/${hash}`
+      });
     }
 
     seen.txs = Array.from(seenSet).slice(-30000);
@@ -563,18 +823,18 @@ async function scanBTCTransfers() {
 
       addFlow("BTC", "TRANSFER", amount, usdValue, price, "Bitcoin Network", tx.txid);
 
-      await sendSignal(
-        compactSignalMessage({
-          asset: "BTC",
-          side: "TRANSFER",
-          amount,
-          usdValue,
-          price,
-          change24h: livePrices.BTC.change24h,
-          wallet: "Bitcoin Network",
-          tx: btcTxLink(tx.txid)
-        })
-      );
+      await sendSignalCard({
+        asset: "BTC",
+        side: "TRANSFER",
+        amount,
+        usdValue,
+        price,
+        change24h: livePrices.BTC.change24h,
+        txHash: tx.txid,
+        walletRaw: "Bitcoin Network",
+        txUrl: `https://mempool.space/tx/${tx.txid}`,
+        walletUrl: `https://mempool.space/tx/${tx.txid}`
+      });
     }
 
     seen.txs = Array.from(seenSet).slice(-30000);
@@ -619,18 +879,18 @@ async function scanEvmTransfers(asset) {
 
       addFlow(asset, "TRANSFER", amount, usdValue, price, market.chainName, tx.hash);
 
-      await sendSignal(
-        compactSignalMessage({
-          asset,
-          side: "TRANSFER",
-          amount,
-          usdValue,
-          price,
-          change24h: livePrices[asset].change24h,
-          wallet: walletLink(tx.from, market.explorer),
-          tx: txLink(tx.hash, market.explorer)
-        })
-      );
+      await sendSignalCard({
+        asset,
+        side: "TRANSFER",
+        amount,
+        usdValue,
+        price,
+        change24h: livePrices[asset].change24h,
+        txHash: tx.hash,
+        walletRaw: tx.from,
+        txUrl: `${market.explorer}/tx/${tx.hash}`,
+        walletUrl: `${market.explorer}/address/${tx.from}`
+      });
     }
 
     seen.txs = Array.from(seenSet).slice(-30000);
@@ -666,7 +926,7 @@ function buildFlowReport(hours) {
     const volumeText = formatUsd(f.volume);
     const netText = f.net >= 0 ? `+${formatUsd(f.net)}` : formatUsd(f.net);
 
-    text += `${m.emoji} <b>${m.display}</b>\n`;
+    text += `<b>${m.display}</b>\n`;
     text += `Volume: ${volumeText} | Net: ${netText}\n\n`;
   }
 
@@ -691,9 +951,8 @@ function buildTopReport(hours, type) {
         : `📊 <b>TOP VOLUME ${hours}H</b>\n\n`;
 
   rows.forEach((r, i) => {
-    const m = MARKETS[r.asset];
     const value = type === "inflow" ? r.inflow : type === "outflow" ? r.outflow : r.volume;
-    text += `${i + 1}. ${m.emoji} <b>${m.display}</b> ${formatUsd(value)}\n`;
+    text += `${i + 1}. <b>${r.asset}</b> ${formatUsd(value)}\n`;
   });
 
   return text;
@@ -710,18 +969,17 @@ function buildSummary() {
     const f = getAssetFlow(asset, 24);
     const p = livePrices[asset];
     const bias = marketBias(p.change24h, f.net, f.volume);
-    const m = MARKETS[asset];
 
     totalNet += f.net;
     totalVolume += f.volume;
     whaleCount += f.txCount;
 
-    text += `${m.emoji} <b>${m.display}</b> → ${bias}\n`;
+    text += `<b>${asset}</b> → ${bias.text}\n`;
   }
 
-  text += `\n🌊 Volume: ${formatUsd(totalVolume)}\n`;
-  text += `📌 Net: ${totalNet >= 0 ? "+" : ""}${formatUsd(totalNet)}\n`;
-  text += `🐋 Activity: ${whaleCount} signals\n`;
+  text += `\nVolume: ${formatUsd(totalVolume)}\n`;
+  text += `Net: ${totalNet >= 0 ? "+" : ""}${formatUsd(totalNet)}\n`;
+  text += `Activity: ${whaleCount} signals\n`;
 
   return text;
 }
@@ -738,7 +996,7 @@ bot.on("message", (msg) => {
 
 bot.onText(/\/start/, async (msg) => {
   await bot.sendMessage(msg.chat.id, `
-🐋 WhaleSignals VIP Access
+WhaleSignals VIP Access
 
 Commands:
 /verify WALLET_ADDRESS
@@ -785,8 +1043,7 @@ Required Minimum: ${MIN_WAI_ACCESS} WAI`
       verifiedAt: nowIso(),
       lastCheck: nowIso()
     };
-
-    if (existingIndex >= 0) users[existingIndex] = { ...users[existingIndex], ...userData };
+        if (existingIndex >= 0) users[existingIndex] = { ...users[existingIndex], ...userData };
     else users.push(userData);
 
     writeJson(USERS_FILE, users);
@@ -820,7 +1077,7 @@ bot.onText(/\/myaccess/, async (msg) => {
   if (!user) return bot.sendMessage(msg.chat.id, "No verified wallet found.");
 
   await bot.sendMessage(msg.chat.id, `
-🐋 WhaleSignals VIP Access
+WhaleSignals VIP Access
 
 Status: ${user.verified ? "ACTIVE ✅" : "INACTIVE ❌"}
 Wallet: ${shortHash(user.wallet)}
@@ -831,23 +1088,23 @@ Last Check: ${user.lastCheck || "Never"}
 
 bot.onText(/\/markets/, async (msg) => {
   await bot.sendMessage(msg.chat.id, `
-🐋 WhaleSignals Markets
+WhaleSignals Markets
 
-✅ BTC
-✅ ETH
-✅ BNB
-✅ AVAX
-✅ MATIC/POL
+BTC
+ETH
+BNB
+AVAX
+MATIC/POL
 
 Signals:
-🟢 BUY
-🔴 SELL
-🟡 TRANSFER
+BUY
+SELL
+TRANSFER
 
 Whale Levels:
-🐋 Whale: $50K+
-🐳 Mega Whale: $500K+
-🦈 Giant Whale: $1M+
+Whale: $50K+
+Mega Whale: $500K+
+Giant Whale: $1M+
 
 Commands:
 /prices
@@ -857,6 +1114,8 @@ Commands:
 /topinflow
 /topoutflow
 /summary
+/summarycard
+/testcard
 `);
 });
 
@@ -872,16 +1131,17 @@ bot.onText(/\/price (.+)/, async (msg, match) => {
   const p = livePrices[asset];
   const f = getAssetFlow(asset, 24);
   const m = MARKETS[asset];
+  const bias = marketBias(p.change24h, f.net, f.volume);
 
   await bot.sendMessage(msg.chat.id, `
-📊 <b>${m.display}</b>
+<b>${m.display}</b>
 
-${m.emoji} ${m.chainLabel}
-💵 ${formatUsd(p.price)}
-${Number(p.change24h || 0) >= 0 ? "📈" : "📉"} ${formatPct(p.change24h)}
-🌊 Volume: ${formatUsd(f.volume)}
-📌 Net: ${f.net >= 0 ? "+" : ""}${formatUsd(f.net)}
-${marketBias(p.change24h, f.net, f.volume)}
+${m.chainLabel}
+Price: ${formatUsd(p.price)}
+24H: ${formatPct(p.change24h)}
+Volume: ${formatUsd(f.volume)}
+Net: ${f.net >= 0 ? "+" : ""}${formatUsd(f.net)}
+Bias: ${bias.text}
 `, { parse_mode: "HTML" });
 });
 
@@ -892,9 +1152,7 @@ bot.onText(/\/prices/, async (msg) => {
 
   for (const asset of Object.keys(MARKETS)) {
     const p = livePrices[asset];
-    const m = MARKETS[asset];
-
-    text += `${m.emoji} <b>${m.display}</b> ${formatUsd(p.price)} ${formatPct(p.change24h)}\n`;
+    text += `<b>${asset}</b> ${formatUsd(p.price)} ${formatPct(p.change24h)}\n`;
   }
 
   await bot.sendMessage(msg.chat.id, text, { parse_mode: "HTML" });
@@ -931,6 +1189,33 @@ bot.onText(/\/summary/, async (msg) => {
   await bot.sendMessage(msg.chat.id, "✅ Summary sent.");
 });
 
+bot.onText(/\/summarycard/, async (msg) => {
+  if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
+  await updateLivePrices();
+  await sendSummaryCard(24);
+  await bot.sendMessage(msg.chat.id, "✅ Summary card sent.");
+});
+
+bot.onText(/\/testcard/, async (msg) => {
+  if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
+  await updateLivePrices();
+
+  await sendSignalCard({
+    asset: "ETH",
+    side: "BUY",
+    amount: 62.8054,
+    usdValue: 102330,
+    price: livePrices.ETH.price || 1630,
+    change24h: livePrices.ETH.change24h || -3.81,
+    txHash: "0x0d15aaabbbcccdddeeefff1112223334445556667778889990001112223344522",
+    walletRaw: "0x5607aaabbbcccdddeeefff111222333444555fF6A",
+    txUrl: "https://etherscan.io",
+    walletUrl: "https://etherscan.io"
+  });
+
+  await bot.sendMessage(msg.chat.id, "✅ Test card sent.");
+});
+
 bot.onText(/\/status/, async (msg) => {
   if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
 
@@ -938,11 +1223,12 @@ bot.onText(/\/status/, async (msg) => {
   const active = users.filter(u => u.verified).length;
 
   await bot.sendMessage(msg.chat.id, `
-🐋 WhaleSignals Status
+WhaleSignals Status
 
 Signals: ${signalsEnabled ? "ON ✅" : "OFF ❌"}
 Prices: CoinGecko ✅
 Moralis DEX: ${MORALIS_ENABLED && MORALIS_API_KEY ? "ON ✅" : "OFF ❌"}
+Cards: ON ✅
 
 Markets:
 BTC ✅
@@ -985,7 +1271,7 @@ setInterval(checkAllHolders, CHECK_HOLDERS_INTERVAL_SECONDS * 1000);
 setInterval(() => postFlowReport(12), FLOW12_INTERVAL_SECONDS * 1000);
 setInterval(() => postFlowReport(24), FLOW24_INTERVAL_SECONDS * 1000);
 
-console.log("WhaleSignals Bot running...");
+console.log("WhaleSignals Premium Card Bot running...");
 console.log("Markets: BTC ETH BNB AVAX MATIC/POL");
 console.log("Prices: CoinGecko");
 console.log("Moralis DEX:", MORALIS_ENABLED && !!MORALIS_API_KEY);
