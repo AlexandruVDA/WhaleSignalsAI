@@ -335,29 +335,29 @@ async function createSignalCard(data) {
   <rect x="35" y="35" width="1130" height="450" rx="34" fill="#122033" stroke="#334155" stroke-width="3"/>
 
   <circle cx="95" cy="95" r="32" fill="${market.color || "#64748B"}"/>
-  <text x="145" y="112" font-family="Arial" font-size="52" font-weight="900" fill="#FFFFFF">${safeAsset}</text>
+  <text x="145" y="112" font-family="sans-serif" font-size="52" font-weight="900" fill="#FFFFFF">${safeAsset}</text>
 
   <rect x="315" y="60" width="205" height="60" rx="16" fill="${sideColor}"/>
-  <text x="418" y="102" text-anchor="middle" font-family="Arial" font-size="34" font-weight="900" fill="#07111F">${sideLabel}</text>
+  <text x="418" y="102" text-anchor="middle" font-family="sans-serif" font-size="34" font-weight="900" fill="#07111F">${sideLabel}</text>
 
-  <text x="75" y="210" font-family="Arial" font-size="74" font-weight="900" fill="#FFFFFF">${safeUsd}</text>
-  <text x="75" y="275" font-family="Arial" font-size="42" font-weight="700" fill="#CBD5E1">${safeAmount}</text>
+  <text x="75" y="210" font-family="sans-serif" font-size="74" font-weight="900" fill="#FFFFFF">${safeUsd}</text>
+  <text x="75" y="275" font-family="sans-serif" font-size="42" font-weight="700" fill="#CBD5E1">${safeAmount}</text>
 
   <line x1="600" y1="155" x2="600" y2="330" stroke="#64748B" stroke-width="4"/>
 
-  <text x="680" y="205" font-family="Arial" font-size="46" font-weight="800" fill="#FFFFFF">PRICE ${safePrice}</text>
-  <text x="680" y="270" font-family="Arial" font-size="46" font-weight="900" fill="${changeColor}">24H ${safeChange}</text>
-  <text x="680" y="330" font-family="Arial" font-size="42" font-weight="800" fill="#F97316">SIGNAL ${signalStrength(data.usdValue)}</text>
+  <text x="680" y="205" font-family="sans-serif" font-size="46" font-weight="800" fill="#FFFFFF">PRICE ${safePrice}</text>
+  <text x="680" y="270" font-family="sans-serif" font-size="46" font-weight="900" fill="${changeColor}">24H ${safeChange}</text>
+  <text x="680" y="330" font-family="sans-serif" font-size="42" font-weight="800" fill="#F97316">SIGNAL ${signalStrength(data.usdValue)}</text>
 
   <line x1="75" y1="365" x2="1125" y2="365" stroke="#64748B" stroke-width="4"/>
 
-  <text x="75" y="425" font-family="Arial" font-size="34" font-weight="800" fill="#94A3B8">TX</text>
-  <text x="145" y="425" font-family="Arial" font-size="34" font-weight="800" fill="#7C9DFF">${safeTx}</text>
+  <text x="75" y="425" font-family="sans-serif" font-size="34" font-weight="800" fill="#94A3B8">TX</text>
+  <text x="145" y="425" font-family="sans-serif" font-size="34" font-weight="800" fill="#7C9DFF">${safeTx}</text>
 
-  <text x="600" y="425" font-family="Arial" font-size="34" font-weight="800" fill="#94A3B8">WALLET</text>
-  <text x="760" y="425" font-family="Arial" font-size="34" font-weight="800" fill="#7C9DFF">${safeWallet}</text>
+  <text x="600" y="425" font-family="sans-serif" font-size="34" font-weight="800" fill="#94A3B8">WALLET</text>
+  <text x="760" y="425" font-family="sans-serif" font-size="34" font-weight="800" fill="#7C9DFF">${safeWallet}</text>
 
-  <text x="1125" y="465" text-anchor="end" font-family="Arial" font-size="28" font-weight="800" fill="#64748B">WhaleSignalsAI</text>
+  <text x="1125" y="465" text-anchor="end" font-family="sans-serif" font-size="28" font-weight="800" fill="#64748B">WhaleSignalsAI</text>
 </svg>`;
 
   return sharp(Buffer.from(svg)).png().toBuffer();
