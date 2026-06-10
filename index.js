@@ -5,6 +5,13 @@ const axios = require("axios");
 const fs = require("fs");
 const { ethers } = require("ethers");
 const { createCanvas, GlobalFonts } = require("@napi-rs/canvas");
+try {
+  GlobalFonts.registerFromPath("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "Arial");
+  GlobalFonts.registerFromPath("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "Arial");
+  console.log("Fonts loaded");
+} catch (err) {
+  console.log("Font load failed:", err.message);
+}
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 
