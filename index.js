@@ -396,7 +396,7 @@ async function createSignalCard(data) {
 
   return sharp(Buffer.from(svg)).png().toBuffer();
 }
-}
+
 
 async function sendGroup(text) {
   await bot.sendMessage(TELEGRAM_GROUP_ID, text, {
