@@ -327,34 +327,33 @@ async function createSignalCard(data) {
   <rect x="35" y="35" width="1130" height="450" rx="34" fill="#122033" stroke="#334155" stroke-width="3"/>
 
   <circle cx="95" cy="95" r="32" fill="${market.color}"/>
-  <text x="145" y="110" font-family="DejaVu Sans" font-size="52" font-weight="900" fill="#FFFFFF">${data.asset}</text>
+  <text x="145" y="110" font-family="Arial" font-size="52" font-weight="900" fill="#FFFFFF">${data.asset}</text>
 
   <rect x="310" y="63" width="190" height="55" rx="14" fill="${sideColor}"/>
-  <text x="405" y="103" text-anchor="middle" font-family="DejaVu Sans" font-size="32" font-weight="900" fill="#07111F">${sideText}</text>
+  <text x="405" y="103" text-anchor="middle" font-family="Arial" font-size="32" font-weight="900" fill="#07111F">${sideText}</text>
 
-  <text x="75" y="205" font-family="DejaVu Sans" font-size="72" font-weight="900" fill="#FFFFFF">${formatUsd(data.usdValue)}</text>
-  <text x="75" y="270" font-family="DejaVu Sans" font-size="42" font-weight="700" fill="#CBD5E1">${formatAmount(data.amount, 4)} ${data.asset}</text>
+  <text x="75" y="205" font-family="Arial" font-size="72" font-weight="900" fill="#FFFFFF">${formatUsd(data.usdValue)}</text>
+  <text x="75" y="270" font-family="Arial" font-size="42" font-weight="700" fill="#CBD5E1">${formatAmount(data.amount, 4)} ${data.asset}</text>
 
   <line x1="600" y1="155" x2="600" y2="330" stroke="#334155" stroke-width="3"/>
 
-  <text x="680" y="205" font-family="DejaVu Sans" font-size="46" font-weight="800" fill="#FFFFFF">Price: ${formatUsd(data.price)}</text>
-  <text x="680" y="270" font-family="DejaVu Sans" font-size="46" font-weight="900" fill="${changeColor}">24H: ${formatPct(data.change24h)}</text>
-  <text x="680" y="330" font-family="DejaVu Sans" font-size="42" font-weight="800" fill="#F97316">Signal: ${signalStrength(data.usdValue)}</text>
+  <text x="680" y="205" font-family="Arial" font-size="46" font-weight="800" fill="#FFFFFF">Price: ${formatUsd(data.price)}</text>
+  <text x="680" y="270" font-family="Arial" font-size="46" font-weight="900" fill="${changeColor}">24H: ${formatPct(data.change24h)}</text>
+  <text x="680" y="330" font-family="Arial" font-size="42" font-weight="800" fill="#F97316">Signal: ${signalStrength(data.usdValue)}</text>
 
   <line x1="75" y1="360" x2="1125" y2="360" stroke="#334155" stroke-width="3"/>
 
-  <text x="75" y="420" font-family="DejaVu Sans" font-size="34" font-weight="800" fill="#94A3B8">TX:</text>
-  <text x="145" y="420" font-family="DejaVu Sans" font-size="34" font-weight="800" fill="#7C9DFF">${shortHash(data.txHash)}</text>
+  <text x="75" y="420" font-family="Arial" font-size="34" font-weight="800" fill="#94A3B8">TX:</text>
+  <text x="145" y="420" font-family="Arial" font-size="34" font-weight="800" fill="#7C9DFF">${shortHash(data.txHash)}</text>
 
-  <text x="600" y="420" font-family="DejaVu Sans" font-size="34" font-weight="800" fill="#94A3B8">Wallet:</text>
-  <text x="735" y="420" font-family="DejaVu Sans" font-size="34" font-weight="800" fill="#7C9DFF">${shortHash(data.walletRaw || "Network")}</text>
+  <text x="600" y="420" font-family="Arial" font-size="34" font-weight="800" fill="#94A3B8">Wallet:</text>
+  <text x="735" y="420" font-family="Arial" font-size="34" font-weight="800" fill="#7C9DFF">${shortHash(data.walletRaw || "Network")}</text>
 
-  <text x="1125" y="465" text-anchor="end" font-family="DejaVu Sans" font-size="28" font-weight="800" fill="#64748B">WhaleSignalsAI</text>
+  <text x="1125" y="465" text-anchor="end" font-family="Arial" font-size="28" font-weight="800" fill="#64748B">WhaleSignalsAI</text>
 </svg>`;
 
   return sharp(Buffer.from(svg)).png().toBuffer();
 }
-
 
 
 async function sendGroup(text) {
