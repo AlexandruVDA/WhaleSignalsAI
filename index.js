@@ -313,86 +313,51 @@ function drawLabel(ctx, text, x, y, color, bg) {
 }
 async function createSignalCard(data) {
   const market = MARKETS[data.asset] || MARKETS.ETH;
+
   const sideColor =
     data.side === "BUY" ? "#22C55E" :
     data.side === "SELL" ? "#EF4444" :
     "#FACC15";
 
-  const sideIcon =
-    data.side === "BUY" ? "●" :
-    data.side === "SELL" ? "●" :
-    "●";
+  const sideText =
+    data.side === "BUY" ? "BUY" :
+    data.side === "SELL" ? "SELL" :
+    "TRANSFER";
 
-  const whale = whaleClass(data.usdValue);
   const change = Number(data.change24h || 0);
   const changeColor = change >= 0 ? "#22C55E" : "#EF4444";
+  const whale = whaleClass(data.usdValue);
 
   const svg = `
-  <svg width="1200" height="520" viewBox="0 0 1200 520" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#07111F"/>
-        <stop offset="100%" stop-color="#111827"/>
-      </linearGradient>
-      <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stop-color="#101B2B"/>
-        <stop offset="100%" stop-color="#172338"/>
-      </linearGradient>
-      <filter id="glow">
-        <feGaussianBlur stdDeviation="12" result="coloredBlur"/>
-        <feMerge>
-          <feMergeNode in="coloredBlur"/>
-          <feMergeNode in="SourceGraphic"/>
-        </feMerge>
-      </filter>
-    </defs>
+<svg width="1200" height="520" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="520" fill="#07111F"/>
+  <rect x="35" y="35" width="1130" height="450" rx="34" fill="#122033" stroke="#334155" stroke-width="3"/>
 
-    <rect width="1200" height="520" fill="url(#bg)"/>
-    <circle cx="1050" cy="70" r="260" fill="${market.color}" opacity="0.12"/>
+  <circle cx="95" cy="95" r="32" fill="${market.color}"/>
+  <text x="145" y="110" font-family="sans-serif" font-size="52" font-weight="900" fill="#FFFFFF">${data.asset}</text>
 
-    <rect x="35" y="35" width="1130" height="450" rx="34" fill="url(#card)" stroke="rgba(148,163,184,0.35)" stroke-width="2"/>
+  <rect x="310" y="63" width="190" height="55" rx="14" fill="${sideColor}"/>
+  <text x="405" y="103" text-anchor="middle" font-family="sans-serif" font-size="32" font-weight="900" fill="#07111F">${sideText}</text>
 
-    <circle cx="102" cy="97" r="28" fill="${market.color}" filter="url(#glow)"/>
-    <text x="102" y="108" text-anchor="middle" font-family="Arial, DejaVu Sans, sans-serif" font-size="30" font-weight="900" fill="#FFFFFF">${market.symbolIcon}</text>
+  <text x="75" y="205" font-family="sans-serif" font-size="72" font-weight="900" fill="#FFFFFF">${formatUsd(data.usdValue)}</text>
+  <text x="75" y="270" font-family="sans-serif" font-size="42" font-weight="700" fill="#CBD5E1">${formatAmount(data.amount, 4)} ${data.asset}</text>
 
-    <text x="145" y="110" font-family="Arial, DejaVu Sans, sans-serif" font-size="40" font-weight="900" fill="#F8FAFC">${data.asset}</text>
-    <text x="238" y="110" font-family="Arial, DejaVu Sans, sans-serif" font-size="34" font-weight="700" fill="#64748B">|</text>
-    <text x="270" y="110" font-family="Arial, DejaVu Sans, sans-serif" font-size="36" font-weight="900" fill="${sideColor}">${sideIcon}</text>
+  <line x1="600" y1="155" x2="600" y2="330" stroke="#334155" stroke-width="3"/>
 
-    <text x="145" y="150" font-family="Arial, DejaVu Sans, sans-serif" font-size="24" font-weight="700" fill="#94A3B8">${market.chainLabel}</text>
+  <text x="680" y="205" font-family="sans-serif" font-size="46" font-weight="800" fill="#FFFFFF">Price: ${formatUsd(data.price)}</text>
+  <text x="680" y="270" font-family="sans-serif" font-size="46" font-weight="900" fill="${changeColor}">24H: ${formatPct(data.change24h)}</text>
+  <text x="680" y="330" font-family="sans-serif" font-size="42" font-weight="800" fill="#F97316">Signal: ${signalStrength(data.usdValue)}</text>
 
-    <text x="1125" y="110" text-anchor="end" font-family="Arial, DejaVu Sans, sans-serif" font-size="24" font-weight="700" fill="#CBD5E1">
-      ${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-    </text>
+  <line x1="75" y1="360" x2="1125" y2="360" stroke="#334155" stroke-width="3"/>
 
-    <line x1="75" y1="180" x2="1125" y2="180" stroke="rgba(148,163,184,0.28)" stroke-width="2"/>
+  <text x="75" y="420" font-family="sans-serif" font-size="34" font-weight="800" fill="#94A3B8">TX:</text>
+  <text x="145" y="420" font-family="sans-serif" font-size="34" font-weight="800" fill="#7C9DFF">${shortHash(data.txHash)}</text>
 
-    <text x="75" y="255" font-family="Arial, DejaVu Sans, sans-serif" font-size="58" font-weight="900" fill="#F8FAFC">${formatUsd(data.usdValue)}</text>
-    <text x="75" y="310" font-family="Arial, DejaVu Sans, sans-serif" font-size="34" font-weight="700" fill="#E2E8F0">${formatAmount(data.amount, 4)} ${data.asset}</text>
+  <text x="600" y="420" font-family="sans-serif" font-size="34" font-weight="800" fill="#94A3B8">Wallet:</text>
+  <text x="735" y="420" font-family="sans-serif" font-size="34" font-weight="800" fill="#7C9DFF">${shortHash(data.walletRaw || "Network")}</text>
 
-    <line x1="490" y1="215" x2="490" y2="330" stroke="rgba(148,163,184,0.25)" stroke-width="2"/>
-
-    <text x="555" y="250" font-family="Arial, DejaVu Sans, sans-serif" font-size="34" font-weight="800" fill="#E2E8F0">${formatUsd(data.price)}</text>
-    <text x="555" y="302" font-family="Arial, DejaVu Sans, sans-serif" font-size="36" font-weight="900" fill="${changeColor}">${formatPct(data.change24h)}</text>
-
-    <rect x="810" y="215" width="230" height="48" rx="14" fill="rgba(249,115,22,0.22)"/>
-    <text x="830" y="249" font-family="Arial, DejaVu Sans, sans-serif" font-size="28" font-weight="900" fill="#FFFFFF">🔥 ${signalStrength(data.usdValue)}</text>
-
-    <rect x="810" y="285" width="290" height="48" rx="14" fill="rgba(59,130,246,0.18)"/>
-    <text x="830" y="319" font-family="Arial, DejaVu Sans, sans-serif" font-size="28" font-weight="900" fill="#FFFFFF">${whale.icon} ${whale.label}</text>
-
-    <line x1="75" y1="365" x2="1125" y2="365" stroke="rgba(148,163,184,0.28)" stroke-width="2"/>
-
-    <text x="75" y="420" font-family="Arial, DejaVu Sans, sans-serif" font-size="28" font-weight="700" fill="#CBD5E1">TX:</text>
-    <text x="125" y="420" font-family="Arial, DejaVu Sans, sans-serif" font-size="28" font-weight="800" fill="#7C9DFF">${shortHash(data.txHash)}</text>
-
-    <text x="560" y="420" font-family="Arial, DejaVu Sans, sans-serif" font-size="28" font-weight="700" fill="#CBD5E1">Wallet:</text>
-    <text x="670" y="420" font-family="Arial, DejaVu Sans, sans-serif" font-size="28" font-weight="800" fill="#7C9DFF">${shortHash(data.walletRaw || "Bitcoin Network")}</text>
-
-    <text x="1125" y="460" text-anchor="end" font-family="Arial, DejaVu Sans, sans-serif" font-size="22" font-weight="700" fill="#64748B">
-      WhaleSignalsAI
-    </text>
-  </svg>`;
+  <text x="1125" y="465" text-anchor="end" font-family="sans-serif" font-size="28" font-weight="800" fill="#64748B">WhaleSignalsAI</text>
+</svg>`;
 
   return sharp(Buffer.from(svg)).png().toBuffer();
 }
