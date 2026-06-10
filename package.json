@@ -1,11 +1,7 @@
 {
   "name": "whalesignalsai",
   "version": "1.0.0",
-  "description": "WhaleSignalsAI Telegram bot",
   "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
-  },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.80",
     "axios": "^1.7.9",
