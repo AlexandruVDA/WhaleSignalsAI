@@ -1,0 +1,5 @@
+[phases.setup]
+nixPkgs = ["nodejs_22", "fontconfig", "dejavu_fonts"]
+
+[start]
+cmd = "npm start"
