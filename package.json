@@ -1,12 +1,13 @@
 {
-  "name": "wai-whalesignals-base-bot",
+  "name": "whalesignalsai",
   "version": "1.0.0",
-  "description": "WhaleSignals Telegram bot for WAI on Base",
+  "description": "WhaleSignalsAI Telegram bot",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^0.1.80",
     "axios": "^1.7.9",
     "dotenv": "^16.4.7",
     "ethers": "^6.13.5",
