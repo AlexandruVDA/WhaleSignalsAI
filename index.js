@@ -408,14 +408,15 @@ async function sendGroup(text) {
 async function sendSignalCard(data) {
   if (!signalsEnabled) return;
 
-  const buffer = await createSignalCard(data);
+  try {
+    const buffer = await createSignalCard(data);
 
-const captionIcon =
-  data.side === "BUY" ? "🟢" :
-  data.side === "SELL" ? "🔴" :
-  "🟡";
+    const captionIcon =
+      data.side === "BUY" ? "🟢" :
+      data.side === "SELL" ? "🔴" :
+      "🟡";
 
-const caption = `${data.asset} ${captionIcon} | ${formatUsd(data.usdValue)}`;
+    const caption = `${data.asset} ${captionIcon} | ${formatUsd(data.usdValue)}`;
 
     await bot.sendPhoto(TELEGRAM_GROUP_ID, buffer, {
       caption,
@@ -431,6 +432,7 @@ const caption = `${data.asset} ${captionIcon} | ${formatUsd(data.usdValue)}`;
     });
   } catch (err) {
     console.error("sendSignalCard error:", err.message);
+
   }
 }
 
