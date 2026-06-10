@@ -4,7 +4,7 @@ const TelegramBot = require("node-telegram-bot-api");
 const axios = require("axios");
 const fs = require("fs");
 const { ethers } = require("ethers");
-const { createCanvas, GlobalFonts } = require("@napi-rs/canvas");
+const sharp = require("sharp");
 try {
   GlobalFonts.registerFromPath("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "Arial");
   GlobalFonts.registerFromPath("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "Arial");
@@ -311,221 +311,91 @@ function drawLabel(ctx, text, x, y, color, bg) {
   ctx.fillText(text, x + padX, y);
   return w;
 }
-function createSignalCard(data) {
+async function createSignalCard(data) {
   const market = MARKETS[data.asset] || MARKETS.ETH;
-  const side = sideConfig(data.side);
+  const sideColor =
+    data.side === "BUY" ? "#22C55E" :
+    data.side === "SELL" ? "#EF4444" :
+    "#FACC15";
+
+  const sideIcon =
+    data.side === "BUY" ? "●" :
+    data.side === "SELL" ? "●" :
+    "●";
+
   const whale = whaleClass(data.usdValue);
   const change = Number(data.change24h || 0);
-  const isPositive = change >= 0;
+  const changeColor = change >= 0 ? "#22C55E" : "#EF4444";
 
-  const width = 1200;
-  const height = 520;
-  const canvas = createCanvas(width, height);
-  const ctx = canvas.getContext("2d");
+  const svg = `
+  <svg width="1200" height="520" viewBox="0 0 1200 520" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#07111F"/>
+        <stop offset="100%" stop-color="#111827"/>
+      </linearGradient>
+      <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#101B2B"/>
+        <stop offset="100%" stop-color="#172338"/>
+      </linearGradient>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="12" result="coloredBlur"/>
+        <feMerge>
+          <feMergeNode in="coloredBlur"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+    </defs>
 
-  ctx.fillStyle = gradient(ctx, 0, 0, width, height, "#07111F", "#111827");
-  ctx.fillRect(0, 0, width, height);
+    <rect width="1200" height="520" fill="url(#bg)"/>
+    <circle cx="1050" cy="70" r="260" fill="${market.color}" opacity="0.12"/>
 
-  ctx.globalAlpha = 0.12;
-  ctx.fillStyle = market.color;
-  ctx.beginPath();
-  ctx.arc(1050, 70, 280, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalAlpha = 1;
+    <rect x="35" y="35" width="1130" height="450" rx="34" fill="url(#card)" stroke="rgba(148,163,184,0.35)" stroke-width="2"/>
 
-  ctx.fillStyle = gradient(ctx, 35, 35, width - 70, height - 70, "#101B2B", "#172338");
-  roundRect(ctx, 35, 35, width - 70, height - 70, 34);
-  ctx.fill();
+    <circle cx="102" cy="97" r="28" fill="${market.color}" filter="url(#glow)"/>
+    <text x="102" y="108" text-anchor="middle" font-family="Arial, DejaVu Sans, sans-serif" font-size="30" font-weight="900" fill="#FFFFFF">${market.symbolIcon}</text>
 
-  ctx.strokeStyle = "rgba(148, 163, 184, 0.35)";
-  ctx.lineWidth = 2;
-  roundRect(ctx, 35, 35, width - 70, height - 70, 34);
-  ctx.stroke();
+    <text x="145" y="110" font-family="Arial, DejaVu Sans, sans-serif" font-size="40" font-weight="900" fill="#F8FAFC">${data.asset}</text>
+    <text x="238" y="110" font-family="Arial, DejaVu Sans, sans-serif" font-size="34" font-weight="700" fill="#64748B">|</text>
+    <text x="270" y="110" font-family="Arial, DejaVu Sans, sans-serif" font-size="36" font-weight="900" fill="${sideColor}">${sideIcon}</text>
 
-  drawCircleToken(ctx, 75, 70, 54, market.color, market.symbolIcon, "#FFFFFF");
+    <text x="145" y="150" font-family="Arial, DejaVu Sans, sans-serif" font-size="24" font-weight="700" fill="#94A3B8">${market.chainLabel}</text>
 
-  ctx.fillStyle = "#F8FAFC";
-  ctx.font = "900 38px Arial";
-  ctx.textAlign = "left";
-  ctx.textBaseline = "alphabetic";
-  ctx.fillText(data.asset, 145, 110);
+    <text x="1125" y="110" text-anchor="end" font-family="Arial, DejaVu Sans, sans-serif" font-size="24" font-weight="700" fill="#CBD5E1">
+      ${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+    </text>
 
-  ctx.fillStyle = "#64748B";
-  ctx.font = "700 34px Arial";
-  ctx.fillText("|", 235, 110);
+    <line x1="75" y1="180" x2="1125" y2="180" stroke="rgba(148,163,184,0.28)" stroke-width="2"/>
 
-  ctx.fillStyle = side.color;
-  ctx.font = "900 32px Arial";
-  ctx.fillText(`${side.icon} ${side.label}`, 265, 110);
+    <text x="75" y="255" font-family="Arial, DejaVu Sans, sans-serif" font-size="58" font-weight="900" fill="#F8FAFC">${formatUsd(data.usdValue)}</text>
+    <text x="75" y="310" font-family="Arial, DejaVu Sans, sans-serif" font-size="34" font-weight="700" fill="#E2E8F0">${formatAmount(data.amount, 4)} ${data.asset}</text>
 
-  ctx.fillStyle = "#94A3B8";
-  ctx.font = "700 24px Arial";
-  ctx.fillText(market.chainLabel, 145, 148);
+    <line x1="490" y1="215" x2="490" y2="330" stroke="rgba(148,163,184,0.25)" stroke-width="2"/>
 
-  ctx.fillStyle = "#CBD5E1";
-  ctx.font = "700 24px Arial";
-  ctx.textAlign = "right";
-  ctx.fillText(
-    new Date().toLocaleTimeString("en-GB", {
-      hour: "2-digit",
-      minute: "2-digit"
-    }),
-    width - 75,
-    110
-  );
-  ctx.textAlign = "left";
+    <text x="555" y="250" font-family="Arial, DejaVu Sans, sans-serif" font-size="34" font-weight="800" fill="#E2E8F0">${formatUsd(data.price)}</text>
+    <text x="555" y="302" font-family="Arial, DejaVu Sans, sans-serif" font-size="36" font-weight="900" fill="${changeColor}">${formatPct(data.change24h)}</text>
 
-  ctx.strokeStyle = "rgba(148, 163, 184, 0.28)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(75, 180);
-  ctx.lineTo(width - 75, 180);
-  ctx.stroke();
+    <rect x="810" y="215" width="230" height="48" rx="14" fill="rgba(249,115,22,0.22)"/>
+    <text x="830" y="249" font-family="Arial, DejaVu Sans, sans-serif" font-size="28" font-weight="900" fill="#FFFFFF">🔥 ${signalStrength(data.usdValue)}</text>
 
-  ctx.fillStyle = "#F8FAFC";
-  ctx.font = "900 54px Arial";
-  ctx.fillText(formatUsd(data.usdValue), 75, 255);
+    <rect x="810" y="285" width="290" height="48" rx="14" fill="rgba(59,130,246,0.18)"/>
+    <text x="830" y="319" font-family="Arial, DejaVu Sans, sans-serif" font-size="28" font-weight="900" fill="#FFFFFF">${whale.icon} ${whale.label}</text>
 
-  ctx.fillStyle = "#E2E8F0";
-  ctx.font = "700 34px Arial";
-  ctx.fillText(`${formatAmount(data.amount, 4)} ${data.asset}`, 75, 305);
+    <line x1="75" y1="365" x2="1125" y2="365" stroke="rgba(148,163,184,0.28)" stroke-width="2"/>
 
-  ctx.strokeStyle = "rgba(148, 163, 184, 0.25)";
-  ctx.beginPath();
-  ctx.moveTo(490, 215);
-  ctx.lineTo(490, 330);
-  ctx.stroke();
+    <text x="75" y="420" font-family="Arial, DejaVu Sans, sans-serif" font-size="28" font-weight="700" fill="#CBD5E1">TX:</text>
+    <text x="125" y="420" font-family="Arial, DejaVu Sans, sans-serif" font-size="28" font-weight="800" fill="#7C9DFF">${shortHash(data.txHash)}</text>
 
-  ctx.fillStyle = "#E2E8F0";
-  ctx.font = "800 34px Arial";
-  ctx.fillText(formatUsd(data.price), 555, 250);
+    <text x="560" y="420" font-family="Arial, DejaVu Sans, sans-serif" font-size="28" font-weight="700" fill="#CBD5E1">Wallet:</text>
+    <text x="670" y="420" font-family="Arial, DejaVu Sans, sans-serif" font-size="28" font-weight="800" fill="#7C9DFF">${shortHash(data.walletRaw || "Bitcoin Network")}</text>
 
-  ctx.fillStyle = isPositive ? "#22C55E" : "#EF4444";
-  ctx.font = "900 34px Arial";
-  ctx.fillText(formatPct(data.change24h), 555, 300);
+    <text x="1125" y="460" text-anchor="end" font-family="Arial, DejaVu Sans, sans-serif" font-size="22" font-weight="700" fill="#64748B">
+      WhaleSignalsAI
+    </text>
+  </svg>`;
 
-  drawLabel(ctx, `🔥 ${signalStrength(data.usdValue)}`, 810, 250, "#FFFFFF", "rgba(249, 115, 22, 0.22)");
-  drawLabel(ctx, `${whale.icon} ${whale.label}`, 810, 310, "#FFFFFF", "rgba(59, 130, 246, 0.18)");
-
-  ctx.strokeStyle = "rgba(148, 163, 184, 0.28)";
-  ctx.beginPath();
-  ctx.moveTo(75, 365);
-  ctx.lineTo(width - 75, 365);
-  ctx.stroke();
-
-  ctx.fillStyle = "#CBD5E1";
-  ctx.font = "700 28px Arial";
-  ctx.fillText("TX:", 75, 420);
-
-  ctx.fillStyle = "#7C9DFF";
-  ctx.font = "800 28px Arial";
-  ctx.fillText(shortHash(data.txHash), 125, 420);
-
-  ctx.fillStyle = "#CBD5E1";
-  ctx.font = "700 28px Arial";
-  ctx.fillText("Wallet:", 560, 420);
-
-  ctx.fillStyle = "#7C9DFF";
-  ctx.font = "800 28px Arial";
-  ctx.fillText(shortHash(data.walletRaw || "Bitcoin Network"), 660, 420);
-
-  ctx.fillStyle = "#64748B";
-  ctx.font = "700 22px Arial";
-  ctx.textAlign = "right";
-  ctx.fillText("WhaleSignalsAI", width - 75, 460);
-
-  return canvas.toBuffer("image/png");
+  return sharp(Buffer.from(svg)).png().toBuffer();
 }
-
-function createSummaryCard(hours = 24) {
-  const width = 1200;
-  const height = 520;
-  const canvas = createCanvas(width, height);
-  const ctx = canvas.getContext("2d");
-
-  ctx.fillStyle = gradient(ctx, 0, 0, width, height, "#07111F", "#111827");
-  ctx.fillRect(0, 0, width, height);
-
-  ctx.fillStyle = gradient(ctx, 35, 35, width - 70, height - 70, "#101B2B", "#172338");
-  roundRect(ctx, 35, 35, width - 70, height - 70, 34);
-  ctx.fill();
-
-  ctx.strokeStyle = "rgba(148, 163, 184, 0.35)";
-  ctx.lineWidth = 2;
-  roundRect(ctx, 35, 35, width - 70, height - 70, 34);
-  ctx.stroke();
-
-  ctx.fillStyle = "#F8FAFC";
-  ctx.font = "900 42px Arial";
-  ctx.fillText(`MARKET SUMMARY ${hours}H`, 75, 105);
-
-  ctx.fillStyle = "#94A3B8";
-  ctx.font = "700 24px Arial";
-  ctx.fillText(
-    `Update: ${new Date().toLocaleTimeString("en-GB", {
-      hour: "2-digit",
-      minute: "2-digit"
-    })}`,
-    75,
-    142
-  );
-
-  ctx.strokeStyle = "rgba(148, 163, 184, 0.28)";
-  ctx.beginPath();
-  ctx.moveTo(75, 170);
-  ctx.lineTo(width - 75, 170);
-  ctx.stroke();
-
-  let x = 75;
-  let y = 235;
-  let totalVolume = 0;
-  let totalNet = 0;
-  let totalActivity = 0;
-
-  for (const asset of Object.keys(MARKETS)) {
-    const m = MARKETS[asset];
-    const f = getAssetFlow(asset, hours);
-    const p = livePrices[asset] || {};
-    const bias = marketBias(p.change24h, f.net, f.volume);
-
-    totalVolume += f.volume;
-    totalNet += f.net;
-    totalActivity += f.txCount;
-
-    drawCircleToken(ctx, x, y - 36, 38, m.color, m.symbolIcon);
-
-    ctx.fillStyle = "#F8FAFC";
-    ctx.font = "900 28px Arial";
-    ctx.fillText(m.display, x + 52, y - 7);
-
-    ctx.fillStyle = bias.color;
-    ctx.font = "900 24px Arial";
-    ctx.fillText(bias.text, x + 52, y + 28);
-
-    ctx.fillStyle = "#CBD5E1";
-    ctx.font = "700 22px Arial";
-    ctx.fillText(formatUsd(f.volume), x, y + 72);
-
-    x += 220;
-  }
-
-  ctx.strokeStyle = "rgba(148, 163, 184, 0.28)";
-  ctx.beginPath();
-  ctx.moveTo(75, 360);
-  ctx.lineTo(width - 75, 360);
-  ctx.stroke();
-
-  ctx.fillStyle = "#CBD5E1";
-  ctx.font = "800 30px Arial";
-  ctx.fillText(`Volume: ${formatUsd(totalVolume)}`, 75, 425);
-
-  ctx.fillStyle = totalNet >= 0 ? "#22C55E" : "#EF4444";
-  ctx.fillText(`Net: ${totalNet >= 0 ? "+" : ""}${formatUsd(totalNet)}`, 430, 425);
-
-  ctx.fillStyle = "#CBD5E1";
-  ctx.fillText(`Activity: ${totalActivity} signals`, 745, 425);
-
-  return canvas.toBuffer("image/png");
 }
 
 async function sendGroup(text) {
@@ -538,9 +408,14 @@ async function sendGroup(text) {
 async function sendSignalCard(data) {
   if (!signalsEnabled) return;
 
-  try {
-    const buffer = createSignalCard(data);
-    const caption = `${data.asset} ${data.side} | ${formatUsd(data.usdValue)}`;
+  const buffer = await createSignalCard(data);
+
+const captionIcon =
+  data.side === "BUY" ? "🟢" :
+  data.side === "SELL" ? "🔴" :
+  "🟡";
+
+const caption = `${data.asset} ${captionIcon} | ${formatUsd(data.usdValue)}`;
 
     await bot.sendPhoto(TELEGRAM_GROUP_ID, buffer, {
       caption,
