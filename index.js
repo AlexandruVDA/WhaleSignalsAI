@@ -958,19 +958,19 @@ bot.onText(/\/verify (.+)/, async (msg, match) => {
       return bot.sendMessage(msg.chat.id, "❌ Invalid wallet address.");
     }
 
-    const balance = await getWaiBalance(wallet);
+  const balance = await getWaiBalance(wallet);
 
-    if (balance < MIN_WAI_ACCESS) {
-      return bot.sendMessage(
-        msg.chat.id,
-        `❌ Access Denied
-
+if (telegramId === OWNER_TELEGRAM_ID) {
+  await bot.sendMessage(msg.chat.id, "✅ Owner Access Granted");
+} else if (balance < MIN_WAI_ACCESS) {
+  return bot.sendMessage(
+    msg.chat.id,
+    `❌ Access Denied
 Wallet: ${shortHash(wallet)}
 Balance: ${balance} WAI
 Required Minimum: ${MIN_WAI_ACCESS} WAI`
-      );
-    }
-
+  );
+}
     const users = readJson(USERS_FILE, []);
     const existingIndex = users.findIndex(u => String(u.telegramId) === telegramId);
 
