@@ -1098,45 +1098,45 @@ bot.onText(/\/prices/, async (msg) => {
 });
 
 bot.onText(/\/flow12/, async (msg) => {
-  if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
+  if (!isOwner(msg.from.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
   await sendGroup(buildFlowReport(12));
   await bot.sendMessage(msg.chat.id, "✅ 12H flow sent.");
 });
 
 bot.onText(/\/flow24/, async (msg) => {
-  if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
+  if (!isOwner(msg.from.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
   await sendGroup(buildFlowReport(24));
   await bot.sendMessage(msg.chat.id, "✅ 24H flow sent.");
 });
 
 bot.onText(/\/topinflow/, async (msg) => {
-  if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
+  if (!isOwner(msg.from.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
   await sendGroup(buildTopReport(24, "inflow"));
   await bot.sendMessage(msg.chat.id, "✅ Top inflow sent.");
 });
 
 bot.onText(/\/topoutflow/, async (msg) => {
-  if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
+  if (!isOwner(msg.from.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
   await sendGroup(buildTopReport(24, "outflow"));
   await bot.sendMessage(msg.chat.id, "✅ Top outflow sent.");
 });
 
 bot.onText(/\/summary/, async (msg) => {
-  if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
+  if (!isOwner(msg.from.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
   await updateLivePrices();
   await sendGroup(buildSummary());
   await bot.sendMessage(msg.chat.id, "✅ Summary sent.");
 });
 
 bot.onText(/\/summarycard/, async (msg) => {
-  if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
+  if (!isOwner(msg.from.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
   await updateLivePrices();
   await sendSummaryCard(24);
   await bot.sendMessage(msg.chat.id, "✅ Summary card sent.");
 });
 
 bot.onText(/\/testcard/, async (msg) => {
-  if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
+  if (!isOwner(msg.from.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
   await updateLivePrices();
 
   await sendSignalCard({
@@ -1156,7 +1156,7 @@ bot.onText(/\/testcard/, async (msg) => {
 });
 
 bot.onText(/\/status/, async (msg) => {
-  if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
+  if (!isOwner(msg.from.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
 
   const users = readJson(USERS_FILE, []);
   const active = users.filter(u => u.verified).length;
@@ -1184,19 +1184,19 @@ Active: ${active}
 });
 
 bot.onText(/\/signals_on/, async (msg) => {
-  if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
+  if (!isOwner(msg.from.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
   signalsEnabled = true;
   await bot.sendMessage(msg.chat.id, "✅ Signals ON");
 });
 
 bot.onText(/\/signals_off/, async (msg) => {
-  if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
+  if (!isOwner(msg.from.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
   signalsEnabled = false;
   await bot.sendMessage(msg.chat.id, "❌ Signals OFF");
 });
 
 bot.onText(/\/checkholders/, async (msg) => {
-  if (!isOwner(msg.chat.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
+  if (!isOwner(msg.from.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
   await bot.sendMessage(msg.chat.id, "Checking holders...");
   await checkAllHolders();
   await bot.sendMessage(msg.chat.id, "✅ Holder check completed.");
