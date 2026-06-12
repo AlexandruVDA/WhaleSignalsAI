@@ -321,48 +321,28 @@ async function createSignalCard(data) {
   const change = Number(data.change24h || 0);
   const changeColor = change >= 0 ? "#22C55E" : "#EF4444";
 
-  const safeAsset = String(data.asset || "");
-  const safeAmount = `${formatAmount(data.amount, 4)} ${safeAsset}`;
-  const safeUsd = formatUsd(data.usdValue);
-  const safePrice = formatUsd(data.price);
-  const safeChange = formatPct(data.change24h);
-  const safeTx = shortHash(data.txHash || "TX");
-  const safeWallet = shortHash(data.walletRaw || "Wallet");
-
   const svg = `
 <svg width="1200" height="520" xmlns="http://www.w3.org/2000/svg">
   <rect width="1200" height="520" fill="#07111F"/>
   <rect x="35" y="35" width="1130" height="450" rx="34" fill="#122033" stroke="#334155" stroke-width="3"/>
 
   <circle cx="95" cy="95" r="32" fill="${market.color || "#64748B"}"/>
-  <text x="145" y="112" font-family="sans-serif" font-size="52" font-weight="900" fill="#FFFFFF">${safeAsset}</text>
-
   <rect x="315" y="60" width="205" height="60" rx="16" fill="${sideColor}"/>
-  <text x="418" y="102" text-anchor="middle" font-family="sans-serif" font-size="34" font-weight="900" fill="#07111F">${sideLabel}</text>
-
-  <text x="75" y="210" font-family="sans-serif" font-size="74" font-weight="900" fill="#FFFFFF">${safeUsd}</text>
-  <text x="75" y="275" font-family="sans-serif" font-size="42" font-weight="700" fill="#CBD5E1">${safeAmount}</text>
 
   <line x1="600" y1="155" x2="600" y2="330" stroke="#64748B" stroke-width="4"/>
-
-  <text x="680" y="205" font-family="sans-serif" font-size="46" font-weight="800" fill="#FFFFFF">PRICE ${safePrice}</text>
-  <text x="680" y="270" font-family="sans-serif" font-size="46" font-weight="900" fill="${changeColor}">24H ${safeChange}</text>
-  <text x="680" y="330" font-family="sans-serif" font-size="42" font-weight="800" fill="#F97316">SIGNAL ${signalStrength(data.usdValue)}</text>
-
   <line x1="75" y1="365" x2="1125" y2="365" stroke="#64748B" stroke-width="4"/>
 
-  <text x="75" y="425" font-family="sans-serif" font-size="34" font-weight="800" fill="#94A3B8">TX</text>
-  <text x="145" y="425" font-family="sans-serif" font-size="34" font-weight="800" fill="#7C9DFF">${safeTx}</text>
+  <rect x="75" y="185" width="430" height="72" rx="18" fill="#0F172A"/>
+  <rect x="680" y="185" width="370" height="55" rx="16" fill="#0F172A"/>
+  <rect x="680" y="255" width="370" height="55" rx="16" fill="${changeColor}"/>
+  <rect x="680" y="325" width="370" height="55" rx="16" fill="#F97316"/>
 
-  <text x="600" y="425" font-family="sans-serif" font-size="34" font-weight="800" fill="#94A3B8">WALLET</text>
-  <text x="760" y="425" font-family="sans-serif" font-size="34" font-weight="800" fill="#7C9DFF">${safeWallet}</text>
-
-  <text x="1125" y="465" text-anchor="end" font-family="sans-serif" font-size="28" font-weight="800" fill="#64748B">WhaleSignalsAI</text>
+  <rect x="75" y="405" width="430" height="48" rx="14" fill="#0F172A"/>
+  <rect x="600" y="405" width="430" height="48" rx="14" fill="#0F172A"/>
 </svg>`;
 
   return sharp(Buffer.from(svg)).png().toBuffer();
 }
-
 
 
 async function sendGroup(text) {
@@ -1119,9 +1099,15 @@ updateLivePrices();
 setInterval(updateLivePrices, PRICE_UPDATE_INTERVAL_SECONDS * 1000);
 setInterval(runSignals, CHECK_SIGNALS_INTERVAL_SECONDS * 1000);
 setInterval(checkAllHolders, CHECK_HOLDERS_INTERVAL_SECONDS * 1000);
-setInterval(() => postFlowReport(12), FLOW12_INTERVAL_SECONDS * 1000);
-setInterval(() => postFlowReport(24), FLOW24_INTERVAL_SECONDS * 1000);
+setTimeout(() => {
+  postFlowReport(12);
+  setInterval(() => postFlowReport(12), FLOW12_INTERVAL_SECONDS * 1000);
+}, FLOW12_INTERVAL_SECONDS * 1000);
 
+setTimeout(() => {
+  postFlowReport(24);
+  setInterval(() => postFlowReport(24), FLOW24_INTERVAL_SECONDS * 1000);
+}, FLOW24_INTERVAL_SECONDS * 1000);
 console.log("WhaleSignals Premium Card Bot running...");
 console.log("Markets: BTC ETH BNB AVAX MATIC/POL");
 console.log("Prices: CoinGecko");
