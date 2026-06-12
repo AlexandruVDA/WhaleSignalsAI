@@ -388,13 +388,13 @@ async function createSignalCard(data) {
   ctx.font = "900 58px sans-serif";
   ctx.fillText(`${tier} ${side}`, 270, 185);
 ctx.fillStyle = sideColor;
-roundRect(850, 128, 210, 56, 18);
+roundRect(815, 105, 170, 50, 18);
 ctx.fill();
 
 ctx.fillStyle = "#020617";
 ctx.font = "900 30px sans-serif";
 ctx.textAlign = "center";
-ctx.fillText(asset, 955, 166);
+ctx.fillText(asset, 900, 139);
 ctx.textAlign = "left";
 
   ctx.strokeStyle = "#334155";
