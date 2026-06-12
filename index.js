@@ -318,110 +318,94 @@ async function createSignalCard(data) {
     data.side === "SELL" ? "#DC2626" :
     "#EAB308";
 
-  const bar1 = Math.min(520, Math.max(120, Number(data.usdValue || 0) / 400));
-  const bar2 = Math.min(420, Math.max(90, Math.abs(Number(data.change24h || 0)) * 45));
-  const bar3 = Math.min(360, Math.max(110, Number(data.amount || 0) * 8));
+  const intensity = Math.min(1, Math.max(0.25, Number(data.usdValue || 0) / 500000));
 
   const svg = `
 <svg width="1200" height="520" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="520">
-      <stop offset="0%" stop-color="#050816"/>
+      <stop offset="0%" stop-color="#020617"/>
       <stop offset="45%" stop-color="#071B33"/>
       <stop offset="100%" stop-color="#160B2E"/>
     </linearGradient>
 
-    <linearGradient id="card" x1="0" y1="0" x2="1200" y2="520">
-      <stop offset="0%" stop-color="#102A56"/>
-      <stop offset="55%" stop-color="#0B2342"/>
-      <stop offset="100%" stop-color="#06111F"/>
-    </linearGradient>
-
-    <linearGradient id="accent" x1="0" y1="0" x2="900" y2="0">
-      <stop offset="0%" stop-color="${sideColor}"/>
-      <stop offset="50%" stop-color="#38BDF8"/>
-      <stop offset="100%" stop-color="#8B5CF6"/>
-    </linearGradient>
-
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="9" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-
-    <filter id="softGlow">
-      <feGaussianBlur stdDeviation="18" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-
-    <radialGradient id="radar" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="${sideColor}" stop-opacity="0.75"/>
-      <stop offset="55%" stop-color="#38BDF8" stop-opacity="0.18"/>
+    <radialGradient id="eyeGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="${sideColor}" stop-opacity="0.95"/>
+      <stop offset="45%" stop-color="#38BDF8" stop-opacity="0.25"/>
       <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
     </radialGradient>
+
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="bigGlow">
+      <feGaussianBlur stdDeviation="24" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <linearGradient id="stroke" x1="0" y1="0" x2="1200" y2="0">
+      <stop offset="0%" stop-color="${sideColor}"/>
+      <stop offset="45%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
   </defs>
 
   <rect width="1200" height="520" fill="url(#bg)"/>
 
-  <circle cx="1060" cy="90" r="190" fill="${glowColor}" opacity="0.16" filter="url(#softGlow)"/>
-  <circle cx="140" cy="420" r="220" fill="#2563EB" opacity="0.12" filter="url(#softGlow)"/>
+  <circle cx="160" cy="260" r="210" fill="${glowColor}" opacity="${0.12 + intensity * 0.12}" filter="url(#bigGlow)"/>
+  <circle cx="1020" cy="90" r="180" fill="#2563EB" opacity="0.12" filter="url(#bigGlow)"/>
 
-  <g opacity="0.16">
-    <line x1="0" y1="90" x2="1200" y2="90" stroke="#38BDF8"/>
-    <line x1="0" y1="180" x2="1200" y2="180" stroke="#38BDF8"/>
-    <line x1="0" y1="270" x2="1200" y2="270" stroke="#38BDF8"/>
-    <line x1="0" y1="360" x2="1200" y2="360" stroke="#38BDF8"/>
-    <line x1="150" y1="0" x2="150" y2="520" stroke="#38BDF8"/>
-    <line x1="300" y1="0" x2="300" y2="520" stroke="#38BDF8"/>
-    <line x1="450" y1="0" x2="450" y2="520" stroke="#38BDF8"/>
-    <line x1="600" y1="0" x2="600" y2="520" stroke="#38BDF8"/>
-    <line x1="750" y1="0" x2="750" y2="520" stroke="#38BDF8"/>
-    <line x1="900" y1="0" x2="900" y2="520" stroke="#38BDF8"/>
-    <line x1="1050" y1="0" x2="1050" y2="520" stroke="#38BDF8"/>
+  <g opacity="0.12">
+    <path d="M0 80 H1200 M0 160 H1200 M0 240 H1200 M0 320 H1200 M0 400 H1200" stroke="#38BDF8"/>
+    <path d="M120 0 V520 M240 0 V520 M360 0 V520 M480 0 V520 M600 0 V520 M720 0 V520 M840 0 V520 M960 0 V520 M1080 0 V520" stroke="#38BDF8"/>
   </g>
 
-  <rect x="35" y="35" width="1130" height="450" rx="36" fill="url(#card)" stroke="#60A5FA" stroke-width="3" opacity="0.96"/>
+  <rect x="35" y="35" width="1130" height="450" rx="38" fill="#08182D" opacity="0.94" stroke="url(#stroke)" stroke-width="4"/>
+  <rect x="55" y="55" width="1090" height="410" rx="30" fill="none" stroke="${sideColor}" stroke-width="2" opacity="0.50" filter="url(#glow)"/>
 
-  <rect x="55" y="55" width="1090" height="410" rx="30" fill="none" stroke="${sideColor}" stroke-width="2" opacity="0.45" filter="url(#glow)"/>
+  <g transform="translate(105,260)">
+    <circle r="142" fill="none" stroke="${sideColor}" stroke-width="3" opacity="0.25"/>
+    <circle r="104" fill="none" stroke="#38BDF8" stroke-width="3" opacity="0.30"/>
+    <circle r="66" fill="url(#eyeGlow)" filter="url(#glow)"/>
+    <path d="M-80 0 C-35 -45, 35 -45, 80 0 C35 45, -35 45, -80 0Z" fill="none" stroke="#7DD3FC" stroke-width="6" opacity="0.85" filter="url(#glow)"/>
+    <circle r="24" fill="${sideColor}" filter="url(#glow)"/>
+    <line x1="0" y1="0" x2="138" y2="-92" stroke="${sideColor}" stroke-width="5" opacity="0.85" filter="url(#glow)"/>
+  </g>
 
-  <circle cx="135" cy="125" r="58" fill="url(#radar)" filter="url(#glow)"/>
-  <circle cx="135" cy="125" r="34" fill="${market.color || sideColor}"/>
-  <circle cx="135" cy="125" r="88" fill="none" stroke="${sideColor}" stroke-width="3" opacity="0.28"/>
-  <circle cx="135" cy="125" r="122" fill="none" stroke="#38BDF8" stroke-width="2" opacity="0.18"/>
-  <path d="M135 125 L260 80" stroke="${sideColor}" stroke-width="5" opacity="0.75" filter="url(#glow)"/>
+  <rect x="310" y="75" width="290" height="80" rx="24" fill="${sideColor}" opacity="0.94" filter="url(#glow)"/>
+  <rect x="635" y="78" width="420" height="18" rx="9" fill="#22C55E" opacity="0.85"/>
+  <rect x="635" y="112" width="360" height="14" rx="7" fill="#38BDF8" opacity="0.72"/>
+  <rect x="635" y="142" width="270" height="12" rx="6" fill="#8B5CF6" opacity="0.65"/>
 
-  <rect x="310" y="70" width="250" height="72" rx="22" fill="${sideColor}" opacity="0.92" filter="url(#glow)"/>
-  <rect x="600" y="70" width="420" height="18" rx="9" fill="url(#accent)" opacity="0.85"/>
-  <rect x="600" y="105" width="310" height="14" rx="7" fill="#38BDF8" opacity="0.55"/>
-  <rect x="600" y="132" width="220" height="12" rx="6" fill="#8B5CF6" opacity="0.55"/>
+  <line x1="600" y1="180" x2="600" y2="360" stroke="#93C5FD" stroke-width="4" opacity="0.75"/>
 
-  <line x1="600" y1="175" x2="600" y2="355" stroke="#93C5FD" stroke-width="4" opacity="0.85"/>
+  <rect x="310" y="215" width="245" height="44" rx="14" fill="#1D4ED8" opacity="0.80"/>
+  <rect x="310" y="285" width="330" height="36" rx="12" fill="#38BDF8" opacity="0.72"/>
+  <rect x="310" y="340" width="220" height="30" rx="10" fill="#8B5CF6" opacity="0.65"/>
 
-  <rect x="95" y="215" width="${bar1}" height="44" rx="14" fill="#1D4ED8" opacity="0.75"/>
-  <rect x="95" y="280" width="${bar2}" height="36" rx="12" fill="${sideColor}" opacity="0.9"/>
-  <rect x="95" y="335" width="${bar3}" height="30" rx="10" fill="#38BDF8" opacity="0.65"/>
+  <rect x="685" y="210" width="360" height="44" rx="14" fill="#111827" opacity="0.90"/>
+  <rect x="685" y="278" width="${220 + intensity * 210}" height="44" rx="14" fill="${sideColor}" opacity="0.92" filter="url(#glow)"/>
+  <rect x="685" y="340" width="410" height="34" rx="12" fill="#F97316" opacity="0.85"/>
 
-  <rect x="675" y="205" width="410" height="42" rx="14" fill="#1E293B" opacity="0.9"/>
-  <rect x="675" y="270" width="410" height="42" rx="14" fill="${sideColor}" opacity="0.85"/>
-  <rect x="675" y="335" width="410" height="42" rx="14" fill="#F97316" opacity="0.8"/>
+  <line x1="310" y1="395" x2="1095" y2="395" stroke="#93C5FD" stroke-width="4" opacity="0.72"/>
 
-  <line x1="95" y1="395" x2="1105" y2="395" stroke="#93C5FD" stroke-width="4" opacity="0.75"/>
+  <rect x="310" y="425" width="310" height="42" rx="13" fill="#0F172A" opacity="0.95"/>
+  <rect x="685" y="425" width="410" height="42" rx="13" fill="#0F172A" opacity="0.95"/>
 
-  <rect x="95" y="425" width="430" height="42" rx="13" fill="#0F172A" opacity="0.95"/>
-  <rect x="675" y="425" width="430" height="42" rx="13" fill="#0F172A" opacity="0.95"/>
+  <path d="M895 265 C955 215, 1035 215, 1095 265 C1035 315, 955 315, 895 265Z" fill="none" stroke="#38BDF8" stroke-width="5" opacity="0.55" filter="url(#glow)"/>
+  <circle cx="995" cy="265" r="24" fill="${sideColor}" opacity="0.85" filter="url(#glow)"/>
 
   <circle cx="1080" cy="120" r="6" fill="${sideColor}" opacity="0.9"/>
   <circle cx="1105" cy="145" r="4" fill="#38BDF8" opacity="0.8"/>
-  <circle cx="1038" cy="162" r="4" fill="#8B5CF6" opacity="0.7"/>
-  <circle cx="1065" cy="188" r="3" fill="${sideColor}" opacity="0.75"/>
-
-  <path d="M920 250 C970 215, 1030 215, 1080 250 C1030 285, 970 285, 920 250Z" fill="none" stroke="#38BDF8" stroke-width="4" opacity="0.5" filter="url(#glow)"/>
-  <circle cx="1000" cy="250" r="22" fill="${sideColor}" opacity="0.75" filter="url(#glow)"/>
+  <circle cx="1040" cy="168" r="4" fill="#8B5CF6" opacity="0.7"/>
 </svg>`;
 
   return sharp(Buffer.from(svg)).png().toBuffer();
