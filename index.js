@@ -5,7 +5,7 @@ const axios = require("axios");
 const fs = require("fs");
 const { ethers } = require("ethers");
 const sharp = require("sharp");
-
+const { createCanvas } = require("@napi-rs/canvas");
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 
@@ -306,77 +306,147 @@ function drawLabel(ctx, text, x, y, color, bg) {
   return w;
 }
 async function createSignalCard(data) {
-  const market = MARKETS[data.asset] || MARKETS.ETH;
+  const width = 1200;
+  const height = 520;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+
+  const asset = String(data.asset || "ETH");
+  const side = String(data.side || "TRANSFER");
+  const value = formatUsd(data.usdValue || 0);
+  const price = formatUsd(data.price || 0);
+  const change = formatPct(data.change24h || 0);
+  const amount = `${formatAmount(data.amount || 0, 4)} ${asset}`;
 
   const sideColor =
-    data.side === "BUY" ? "#22C55E" :
-    data.side === "SELL" ? "#EF4444" :
+    side === "BUY" ? "#22C55E" :
+    side === "SELL" ? "#EF4444" :
     "#FACC15";
 
-  const sideEmoji =
-    data.side === "BUY" ? "BUY" :
-    data.side === "SELL" ? "SELL" :
-    "TRANSFER";
-
-  const usd = formatUsd(data.usdValue);
-  const price = formatUsd(data.price);
-  const change = formatPct(data.change24h);
-  const amount = `${formatAmount(data.amount, 4)} ${data.asset}`;
   const tier =
     Number(data.usdValue || 0) >= 1000000 ? "GIANT WHALE" :
     Number(data.usdValue || 0) >= 250000 ? "MEGA WHALE" :
     "WHALE";
 
-  const svg = `
-<svg width="1200" height="520" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="520">
-      <stop offset="0%" stop-color="#020617"/>
-      <stop offset="50%" stop-color="#071B33"/>
-      <stop offset="100%" stop-color="#120726"/>
-    </linearGradient>
+  const bg = ctx.createLinearGradient(0, 0, width, height);
+  bg.addColorStop(0, "#020617");
+  bg.addColorStop(0.5, "#071B33");
+  bg.addColorStop(1, "#160B2E");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, width, height);
 
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="8" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-  </defs>
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
 
-  <rect width="1200" height="520" fill="url(#bg)"/>
-  <rect x="35" y="35" width="1130" height="450" rx="36" fill="#08182D" stroke="${sideColor}" stroke-width="4"/>
+  ctx.shadowColor = sideColor;
+  ctx.shadowBlur = 25;
+  ctx.strokeStyle = sideColor;
+  ctx.lineWidth = 4;
+  roundRect(35, 35, 1130, 450, 36);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
 
-  <circle cx="135" cy="130" r="85" fill="none" stroke="${sideColor}" stroke-width="4" opacity="0.55"/>
-  <circle cx="135" cy="130" r="48" fill="${sideColor}" opacity="0.22" filter="url(#glow)"/>
-  <path d="M70 130 C105 85, 165 85, 200 130 C165 175, 105 175, 70 130Z" fill="none" stroke="#7DD3FC" stroke-width="6"/>
-  <circle cx="135" cy="130" r="20" fill="${sideColor}" filter="url(#glow)"/>
+  ctx.fillStyle = "#08182D";
+  roundRect(35, 35, 1130, 450, 36);
+  ctx.fill();
 
-  <text x="270" y="92" font-family="DejaVu Sans, sans-serif" font-size="34" font-weight="800" fill="#94A3B8">WHALESIGNALS AI</text>
-  <text x="270" y="150" font-family="DejaVu Sans, sans-serif" font-size="58" font-weight="900" fill="#FFFFFF">${tier} ${sideEmoji}</text>
+  ctx.strokeStyle = sideColor;
+  ctx.lineWidth = 3;
+  roundRect(55, 55, 1090, 410, 30);
+  ctx.stroke();
 
-  <rect x="850" y="72" width="210" height="62" rx="20" fill="${sideColor}" filter="url(#glow)"/>
-  <text x="955" y="114" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="32" font-weight="900" fill="#020617">${data.asset}</text>
+  ctx.strokeStyle = "#7DD3FC";
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.ellipse(135, 130, 70, 42, 0, 0, Math.PI * 2);
+  ctx.stroke();
 
-  <line x1="75" y1="190" x2="1125" y2="190" stroke="#334155" stroke-width="4"/>
+  ctx.fillStyle = sideColor;
+  ctx.shadowColor = sideColor;
+  ctx.shadowBlur = 25;
+  ctx.beginPath();
+  ctx.arc(135, 130, 22, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
 
-  <text x="95" y="260" font-family="DejaVu Sans, sans-serif" font-size="34" font-weight="800" fill="#94A3B8">VALUE</text>
-  <text x="95" y="330" font-family="DejaVu Sans, sans-serif" font-size="76" font-weight="900" fill="#FFFFFF">${usd}</text>
+  ctx.fillStyle = "#94A3B8";
+  ctx.font = "800 34px sans-serif";
+  ctx.fillText("WHALESIGNALS AI", 270, 92);
 
-  <text x="690" y="260" font-family="DejaVu Sans, sans-serif" font-size="34" font-weight="800" fill="#94A3B8">PRICE</text>
-  <text x="690" y="330" font-family="DejaVu Sans, sans-serif" font-size="52" font-weight="900" fill="#FFFFFF">${price}</text>
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = "900 58px sans-serif";
+  ctx.fillText(`${tier} ${side}`, 270, 150);
 
-  <rect x="690" y="355" width="330" height="58" rx="18" fill="#0F172A"/>
-  <text x="715" y="393" font-family="DejaVu Sans, sans-serif" font-size="30" font-weight="900" fill="${sideColor}">24H ${change}</text>
+  ctx.fillStyle = sideColor;
+  roundRect(850, 72, 210, 62, 20);
+  ctx.fill();
 
-  <line x1="75" y1="430" x2="1125" y2="430" stroke="#334155" stroke-width="4"/>
+  ctx.fillStyle = "#020617";
+  ctx.font = "900 32px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(asset, 955, 113);
+  ctx.textAlign = "left";
 
-  <text x="95" y="470" font-family="DejaVu Sans, sans-serif" font-size="30" font-weight="800" fill="#7DD3FC">AMOUNT ${amount}</text>
-  <text x="1125" y="470" text-anchor="end" font-family="DejaVu Sans, sans-serif" font-size="28" font-weight="800" fill="#94A3B8">TX • WALLET</text>
-</svg>`;
+  ctx.strokeStyle = "#334155";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(75, 190);
+  ctx.lineTo(1125, 190);
+  ctx.stroke();
 
-  return sharp(Buffer.from(svg)).png().toBuffer();
+  ctx.fillStyle = "#94A3B8";
+  ctx.font = "800 34px sans-serif";
+  ctx.fillText("VALUE", 95, 260);
+
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = "900 76px sans-serif";
+  ctx.fillText(value, 95, 330);
+
+  ctx.fillStyle = "#94A3B8";
+  ctx.font = "800 34px sans-serif";
+  ctx.fillText("PRICE", 690, 260);
+
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = "900 52px sans-serif";
+  ctx.fillText(price, 690, 330);
+
+  ctx.fillStyle = "#0F172A";
+  roundRect(690, 355, 330, 58, 18);
+  ctx.fill();
+
+  ctx.fillStyle = sideColor;
+  ctx.font = "900 30px sans-serif";
+  ctx.fillText(`24H ${change}`, 715, 393);
+
+  ctx.strokeStyle = "#334155";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(75, 430);
+  ctx.lineTo(1125, 430);
+  ctx.stroke();
+
+  ctx.fillStyle = "#7DD3FC";
+  ctx.font = "800 30px sans-serif";
+  ctx.fillText(`AMOUNT ${amount}`, 95, 470);
+
+  ctx.fillStyle = "#94A3B8";
+  ctx.font = "800 28px sans-serif";
+  ctx.textAlign = "right";
+  ctx.fillText("TX • WALLET", 1125, 470);
+  ctx.textAlign = "left";
+
+  return canvas.toBuffer("image/png");
 }
 
 
