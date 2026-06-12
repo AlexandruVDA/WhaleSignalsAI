@@ -313,99 +313,67 @@ async function createSignalCard(data) {
     data.side === "SELL" ? "#EF4444" :
     "#FACC15";
 
-  const glowColor =
-    data.side === "BUY" ? "#16A34A" :
-    data.side === "SELL" ? "#DC2626" :
-    "#EAB308";
+  const sideEmoji =
+    data.side === "BUY" ? "BUY" :
+    data.side === "SELL" ? "SELL" :
+    "TRANSFER";
 
-  const intensity = Math.min(1, Math.max(0.25, Number(data.usdValue || 0) / 500000));
+  const usd = formatUsd(data.usdValue);
+  const price = formatUsd(data.price);
+  const change = formatPct(data.change24h);
+  const amount = `${formatAmount(data.amount, 4)} ${data.asset}`;
+  const tier =
+    Number(data.usdValue || 0) >= 1000000 ? "GIANT WHALE" :
+    Number(data.usdValue || 0) >= 250000 ? "MEGA WHALE" :
+    "WHALE";
 
   const svg = `
 <svg width="1200" height="520" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="520">
       <stop offset="0%" stop-color="#020617"/>
-      <stop offset="45%" stop-color="#071B33"/>
-      <stop offset="100%" stop-color="#160B2E"/>
+      <stop offset="50%" stop-color="#071B33"/>
+      <stop offset="100%" stop-color="#120726"/>
     </linearGradient>
-
-    <radialGradient id="eyeGlow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="${sideColor}" stop-opacity="0.95"/>
-      <stop offset="45%" stop-color="#38BDF8" stop-opacity="0.25"/>
-      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
-    </radialGradient>
 
     <filter id="glow">
-      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feGaussianBlur stdDeviation="8" result="blur"/>
       <feMerge>
         <feMergeNode in="blur"/>
         <feMergeNode in="SourceGraphic"/>
       </feMerge>
     </filter>
-
-    <filter id="bigGlow">
-      <feGaussianBlur stdDeviation="24" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-
-    <linearGradient id="stroke" x1="0" y1="0" x2="1200" y2="0">
-      <stop offset="0%" stop-color="${sideColor}"/>
-      <stop offset="45%" stop-color="#38BDF8"/>
-      <stop offset="100%" stop-color="#8B5CF6"/>
-    </linearGradient>
   </defs>
 
   <rect width="1200" height="520" fill="url(#bg)"/>
+  <rect x="35" y="35" width="1130" height="450" rx="36" fill="#08182D" stroke="${sideColor}" stroke-width="4"/>
 
-  <circle cx="160" cy="260" r="210" fill="${glowColor}" opacity="${0.12 + intensity * 0.12}" filter="url(#bigGlow)"/>
-  <circle cx="1020" cy="90" r="180" fill="#2563EB" opacity="0.12" filter="url(#bigGlow)"/>
+  <circle cx="135" cy="130" r="85" fill="none" stroke="${sideColor}" stroke-width="4" opacity="0.55"/>
+  <circle cx="135" cy="130" r="48" fill="${sideColor}" opacity="0.22" filter="url(#glow)"/>
+  <path d="M70 130 C105 85, 165 85, 200 130 C165 175, 105 175, 70 130Z" fill="none" stroke="#7DD3FC" stroke-width="6"/>
+  <circle cx="135" cy="130" r="20" fill="${sideColor}" filter="url(#glow)"/>
 
-  <g opacity="0.12">
-    <path d="M0 80 H1200 M0 160 H1200 M0 240 H1200 M0 320 H1200 M0 400 H1200" stroke="#38BDF8"/>
-    <path d="M120 0 V520 M240 0 V520 M360 0 V520 M480 0 V520 M600 0 V520 M720 0 V520 M840 0 V520 M960 0 V520 M1080 0 V520" stroke="#38BDF8"/>
-  </g>
+  <text x="270" y="92" font-family="DejaVu Sans, sans-serif" font-size="34" font-weight="800" fill="#94A3B8">WHALESIGNALS AI</text>
+  <text x="270" y="150" font-family="DejaVu Sans, sans-serif" font-size="58" font-weight="900" fill="#FFFFFF">${tier} ${sideEmoji}</text>
 
-  <rect x="35" y="35" width="1130" height="450" rx="38" fill="#08182D" opacity="0.94" stroke="url(#stroke)" stroke-width="4"/>
-  <rect x="55" y="55" width="1090" height="410" rx="30" fill="none" stroke="${sideColor}" stroke-width="2" opacity="0.50" filter="url(#glow)"/>
+  <rect x="850" y="72" width="210" height="62" rx="20" fill="${sideColor}" filter="url(#glow)"/>
+  <text x="955" y="114" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="32" font-weight="900" fill="#020617">${data.asset}</text>
 
-  <g transform="translate(105,260)">
-    <circle r="142" fill="none" stroke="${sideColor}" stroke-width="3" opacity="0.25"/>
-    <circle r="104" fill="none" stroke="#38BDF8" stroke-width="3" opacity="0.30"/>
-    <circle r="66" fill="url(#eyeGlow)" filter="url(#glow)"/>
-    <path d="M-80 0 C-35 -45, 35 -45, 80 0 C35 45, -35 45, -80 0Z" fill="none" stroke="#7DD3FC" stroke-width="6" opacity="0.85" filter="url(#glow)"/>
-    <circle r="24" fill="${sideColor}" filter="url(#glow)"/>
-    <line x1="0" y1="0" x2="138" y2="-92" stroke="${sideColor}" stroke-width="5" opacity="0.85" filter="url(#glow)"/>
-  </g>
+  <line x1="75" y1="190" x2="1125" y2="190" stroke="#334155" stroke-width="4"/>
 
-  <rect x="310" y="75" width="290" height="80" rx="24" fill="${sideColor}" opacity="0.94" filter="url(#glow)"/>
-  <rect x="635" y="78" width="420" height="18" rx="9" fill="#22C55E" opacity="0.85"/>
-  <rect x="635" y="112" width="360" height="14" rx="7" fill="#38BDF8" opacity="0.72"/>
-  <rect x="635" y="142" width="270" height="12" rx="6" fill="#8B5CF6" opacity="0.65"/>
+  <text x="95" y="260" font-family="DejaVu Sans, sans-serif" font-size="34" font-weight="800" fill="#94A3B8">VALUE</text>
+  <text x="95" y="330" font-family="DejaVu Sans, sans-serif" font-size="76" font-weight="900" fill="#FFFFFF">${usd}</text>
 
-  <line x1="600" y1="180" x2="600" y2="360" stroke="#93C5FD" stroke-width="4" opacity="0.75"/>
+  <text x="690" y="260" font-family="DejaVu Sans, sans-serif" font-size="34" font-weight="800" fill="#94A3B8">PRICE</text>
+  <text x="690" y="330" font-family="DejaVu Sans, sans-serif" font-size="52" font-weight="900" fill="#FFFFFF">${price}</text>
 
-  <rect x="310" y="215" width="245" height="44" rx="14" fill="#1D4ED8" opacity="0.80"/>
-  <rect x="310" y="285" width="330" height="36" rx="12" fill="#38BDF8" opacity="0.72"/>
-  <rect x="310" y="340" width="220" height="30" rx="10" fill="#8B5CF6" opacity="0.65"/>
+  <rect x="690" y="355" width="330" height="58" rx="18" fill="#0F172A"/>
+  <text x="715" y="393" font-family="DejaVu Sans, sans-serif" font-size="30" font-weight="900" fill="${sideColor}">24H ${change}</text>
 
-  <rect x="685" y="210" width="360" height="44" rx="14" fill="#111827" opacity="0.90"/>
-  <rect x="685" y="278" width="${220 + intensity * 210}" height="44" rx="14" fill="${sideColor}" opacity="0.92" filter="url(#glow)"/>
-  <rect x="685" y="340" width="410" height="34" rx="12" fill="#F97316" opacity="0.85"/>
+  <line x1="75" y1="430" x2="1125" y2="430" stroke="#334155" stroke-width="4"/>
 
-  <line x1="310" y1="395" x2="1095" y2="395" stroke="#93C5FD" stroke-width="4" opacity="0.72"/>
-
-  <rect x="310" y="425" width="310" height="42" rx="13" fill="#0F172A" opacity="0.95"/>
-  <rect x="685" y="425" width="410" height="42" rx="13" fill="#0F172A" opacity="0.95"/>
-
-  <path d="M895 265 C955 215, 1035 215, 1095 265 C1035 315, 955 315, 895 265Z" fill="none" stroke="#38BDF8" stroke-width="5" opacity="0.55" filter="url(#glow)"/>
-  <circle cx="995" cy="265" r="24" fill="${sideColor}" opacity="0.85" filter="url(#glow)"/>
-
-  <circle cx="1080" cy="120" r="6" fill="${sideColor}" opacity="0.9"/>
-  <circle cx="1105" cy="145" r="4" fill="#38BDF8" opacity="0.8"/>
-  <circle cx="1040" cy="168" r="4" fill="#8B5CF6" opacity="0.7"/>
+  <text x="95" y="470" font-family="DejaVu Sans, sans-serif" font-size="30" font-weight="800" fill="#7DD3FC">AMOUNT ${amount}</text>
+  <text x="1125" y="470" text-anchor="end" font-family="DejaVu Sans, sans-serif" font-size="28" font-weight="800" fill="#94A3B8">TX • WALLET</text>
 </svg>`;
 
   return sharp(Buffer.from(svg)).png().toBuffer();
