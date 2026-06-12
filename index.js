@@ -1166,7 +1166,6 @@ WhaleSignals Status
 
 Signals: ${signalsEnabled ? "ON ✅" : "OFF ❌"}
 Prices: CoinGecko ✅
-Moralis DEX: ${MORALIS_ENABLED && MORALIS_API_KEY ? "ON ✅" : "OFF ❌"}
 Cards: ON ✅
 
 Markets:
