@@ -431,8 +431,8 @@ ctx.textAlign = "left";
   ctx.strokeStyle = "#334155";
   ctx.lineWidth = 4;
   ctx.beginPath();
-  ctx.moveTo(75, 460);
-  ctx.lineTo(1125, 460);
+  ctx.moveTo(75, 455);
+  ctx.lineTo(1125, 455);
   ctx.stroke();
 
   ctx.fillStyle = "#7DD3FC";
