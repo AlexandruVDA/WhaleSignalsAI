@@ -386,7 +386,7 @@ async function createSignalCard(data) {
 
   ctx.fillStyle = "#FFFFFF";
   ctx.font = "900 58px sans-serif";
-  ctx.fillText(`${tier} ${side}`, 270, 150);
+  ctx.fillText(`${tier} ${side}`, 270, 175);
 
   ctx.fillStyle = sideColor;
   roundRect(850, 72, 210, 62, 20);
