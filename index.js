@@ -9,8 +9,12 @@ const { createCanvas } = require("@napi-rs/canvas");
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 
+bot.on("channel_post", (msg) => {
+  console.log("CHANNEL ID:", msg.chat.id);
+});
+
 const OWNER_TELEGRAM_ID = String(process.env.OWNER_TELEGRAM_ID || "1657654539");
-const TELEGRAM_GROUP_ID = String(process.env.TELEGRAM_GROUP_ID || "-1003819742117");
+const TELEGRAM_CHANNEL_ID = String(process.env.TELEGRAM_CHANNEL_ID || "-1003819742117");
 
 let signalsEnabled = String(process.env.SIGNALS_ENABLED || "true").toLowerCase() === "true";
 
@@ -450,8 +454,8 @@ ctx.textAlign = "left";
 
 
 async function sendGroup(text) {
-  await bot.sendMessage(TELEGRAM_GROUP_ID, text, {
-    parse_mode: "HTML",
+await bot.sendMessage(TELEGRAM_CHANNEL_ID, text, {
+  parse_mode: "HTML",
     disable_web_page_preview: true
   });
 }
@@ -469,7 +473,7 @@ async function sendSignalCard(data) {
 
     const caption = `${data.asset} ${captionIcon} | ${formatUsd(data.usdValue)}`;
 
-    await bot.sendPhoto(TELEGRAM_GROUP_ID, buffer, {
+    bot.sendPhoto(TELEGRAM_CHANNEL_ID, buffer, {
       caption,
       parse_mode: "HTML",
       reply_markup: {
@@ -490,7 +494,7 @@ async function sendSignalCard(data) {
 async function sendSummaryCard(hours = 24) {
   const buffer = createSummaryCard(hours);
 
-  await bot.sendPhoto(TELEGRAM_GROUP_ID, buffer, {
+  await bot.sendPhoto(TELEGRAM_CHANNEL_ID, buffer, {
     caption: `Market Summary ${hours}H`,
     parse_mode: "HTML"
   });
