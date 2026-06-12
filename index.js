@@ -313,32 +313,115 @@ async function createSignalCard(data) {
     data.side === "SELL" ? "#EF4444" :
     "#FACC15";
 
-  const sideLabel =
-    data.side === "BUY" ? "BUY" :
-    data.side === "SELL" ? "SELL" :
-    "TRANSFER";
+  const glowColor =
+    data.side === "BUY" ? "#16A34A" :
+    data.side === "SELL" ? "#DC2626" :
+    "#EAB308";
 
-  const change = Number(data.change24h || 0);
-  const changeColor = change >= 0 ? "#22C55E" : "#EF4444";
+  const bar1 = Math.min(520, Math.max(120, Number(data.usdValue || 0) / 400));
+  const bar2 = Math.min(420, Math.max(90, Math.abs(Number(data.change24h || 0)) * 45));
+  const bar3 = Math.min(360, Math.max(110, Number(data.amount || 0) * 8));
 
   const svg = `
 <svg width="1200" height="520" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1200" height="520" fill="#07111F"/>
-  <rect x="35" y="35" width="1130" height="450" rx="34" fill="#122033" stroke="#334155" stroke-width="3"/>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="520">
+      <stop offset="0%" stop-color="#050816"/>
+      <stop offset="45%" stop-color="#071B33"/>
+      <stop offset="100%" stop-color="#160B2E"/>
+    </linearGradient>
 
-  <circle cx="95" cy="95" r="32" fill="${market.color || "#64748B"}"/>
-  <rect x="315" y="60" width="205" height="60" rx="16" fill="${sideColor}"/>
+    <linearGradient id="card" x1="0" y1="0" x2="1200" y2="520">
+      <stop offset="0%" stop-color="#102A56"/>
+      <stop offset="55%" stop-color="#0B2342"/>
+      <stop offset="100%" stop-color="#06111F"/>
+    </linearGradient>
 
-  <line x1="600" y1="155" x2="600" y2="330" stroke="#64748B" stroke-width="4"/>
-  <line x1="75" y1="365" x2="1125" y2="365" stroke="#64748B" stroke-width="4"/>
+    <linearGradient id="accent" x1="0" y1="0" x2="900" y2="0">
+      <stop offset="0%" stop-color="${sideColor}"/>
+      <stop offset="50%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
 
-  <rect x="75" y="185" width="430" height="72" rx="18" fill="#0F172A"/>
-  <rect x="680" y="185" width="370" height="55" rx="16" fill="#0F172A"/>
-  <rect x="680" y="255" width="370" height="55" rx="16" fill="${changeColor}"/>
-  <rect x="680" y="325" width="370" height="55" rx="16" fill="#F97316"/>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="9" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
 
-  <rect x="75" y="405" width="430" height="48" rx="14" fill="#0F172A"/>
-  <rect x="600" y="405" width="430" height="48" rx="14" fill="#0F172A"/>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="18" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <radialGradient id="radar" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="${sideColor}" stop-opacity="0.75"/>
+      <stop offset="55%" stop-color="#38BDF8" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="520" fill="url(#bg)"/>
+
+  <circle cx="1060" cy="90" r="190" fill="${glowColor}" opacity="0.16" filter="url(#softGlow)"/>
+  <circle cx="140" cy="420" r="220" fill="#2563EB" opacity="0.12" filter="url(#softGlow)"/>
+
+  <g opacity="0.16">
+    <line x1="0" y1="90" x2="1200" y2="90" stroke="#38BDF8"/>
+    <line x1="0" y1="180" x2="1200" y2="180" stroke="#38BDF8"/>
+    <line x1="0" y1="270" x2="1200" y2="270" stroke="#38BDF8"/>
+    <line x1="0" y1="360" x2="1200" y2="360" stroke="#38BDF8"/>
+    <line x1="150" y1="0" x2="150" y2="520" stroke="#38BDF8"/>
+    <line x1="300" y1="0" x2="300" y2="520" stroke="#38BDF8"/>
+    <line x1="450" y1="0" x2="450" y2="520" stroke="#38BDF8"/>
+    <line x1="600" y1="0" x2="600" y2="520" stroke="#38BDF8"/>
+    <line x1="750" y1="0" x2="750" y2="520" stroke="#38BDF8"/>
+    <line x1="900" y1="0" x2="900" y2="520" stroke="#38BDF8"/>
+    <line x1="1050" y1="0" x2="1050" y2="520" stroke="#38BDF8"/>
+  </g>
+
+  <rect x="35" y="35" width="1130" height="450" rx="36" fill="url(#card)" stroke="#60A5FA" stroke-width="3" opacity="0.96"/>
+
+  <rect x="55" y="55" width="1090" height="410" rx="30" fill="none" stroke="${sideColor}" stroke-width="2" opacity="0.45" filter="url(#glow)"/>
+
+  <circle cx="135" cy="125" r="58" fill="url(#radar)" filter="url(#glow)"/>
+  <circle cx="135" cy="125" r="34" fill="${market.color || sideColor}"/>
+  <circle cx="135" cy="125" r="88" fill="none" stroke="${sideColor}" stroke-width="3" opacity="0.28"/>
+  <circle cx="135" cy="125" r="122" fill="none" stroke="#38BDF8" stroke-width="2" opacity="0.18"/>
+  <path d="M135 125 L260 80" stroke="${sideColor}" stroke-width="5" opacity="0.75" filter="url(#glow)"/>
+
+  <rect x="310" y="70" width="250" height="72" rx="22" fill="${sideColor}" opacity="0.92" filter="url(#glow)"/>
+  <rect x="600" y="70" width="420" height="18" rx="9" fill="url(#accent)" opacity="0.85"/>
+  <rect x="600" y="105" width="310" height="14" rx="7" fill="#38BDF8" opacity="0.55"/>
+  <rect x="600" y="132" width="220" height="12" rx="6" fill="#8B5CF6" opacity="0.55"/>
+
+  <line x1="600" y1="175" x2="600" y2="355" stroke="#93C5FD" stroke-width="4" opacity="0.85"/>
+
+  <rect x="95" y="215" width="${bar1}" height="44" rx="14" fill="#1D4ED8" opacity="0.75"/>
+  <rect x="95" y="280" width="${bar2}" height="36" rx="12" fill="${sideColor}" opacity="0.9"/>
+  <rect x="95" y="335" width="${bar3}" height="30" rx="10" fill="#38BDF8" opacity="0.65"/>
+
+  <rect x="675" y="205" width="410" height="42" rx="14" fill="#1E293B" opacity="0.9"/>
+  <rect x="675" y="270" width="410" height="42" rx="14" fill="${sideColor}" opacity="0.85"/>
+  <rect x="675" y="335" width="410" height="42" rx="14" fill="#F97316" opacity="0.8"/>
+
+  <line x1="95" y1="395" x2="1105" y2="395" stroke="#93C5FD" stroke-width="4" opacity="0.75"/>
+
+  <rect x="95" y="425" width="430" height="42" rx="13" fill="#0F172A" opacity="0.95"/>
+  <rect x="675" y="425" width="430" height="42" rx="13" fill="#0F172A" opacity="0.95"/>
+
+  <circle cx="1080" cy="120" r="6" fill="${sideColor}" opacity="0.9"/>
+  <circle cx="1105" cy="145" r="4" fill="#38BDF8" opacity="0.8"/>
+  <circle cx="1038" cy="162" r="4" fill="#8B5CF6" opacity="0.7"/>
+  <circle cx="1065" cy="188" r="3" fill="${sideColor}" opacity="0.75"/>
+
+  <path d="M920 250 C970 215, 1030 215, 1080 250 C1030 285, 970 285, 920 250Z" fill="none" stroke="#38BDF8" stroke-width="4" opacity="0.5" filter="url(#glow)"/>
+  <circle cx="1000" cy="250" r="22" fill="${sideColor}" opacity="0.75" filter="url(#glow)"/>
 </svg>`;
 
   return sharp(Buffer.from(svg)).png().toBuffer();
