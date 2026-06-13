@@ -15,6 +15,7 @@ bot.on("channel_post", (msg) => {
 
 const OWNER_TELEGRAM_ID = String(process.env.OWNER_TELEGRAM_ID || "1657654539");
 const TELEGRAM_CHANNEL_ID = String(process.env.TELEGRAM_CHANNEL_ID || "-1003819742117");
+const TELEGRAM_GROUP_ID = String(process.env.TELEGRAM_GROUP_ID || "-1003819742117");
 
 let signalsEnabled = String(process.env.SIGNALS_ENABLED || "true").toLowerCase() === "true";
 
@@ -138,8 +139,24 @@ for (const asset of Object.keys(MARKETS)) {
   livePrices[asset] = { price: 0, change24h: 0, volume24h: 0 };
 }
 
-function isOwner(chatId) {
-  return String(chatId) === OWNER_TELEGRAM_ID;
+function isOwner(userId) {
+  return String(userId) === OWNER_TELEGRAM_ID;
+}
+
+function isPrivateChat(msg) {
+  return msg.chat && msg.chat.type === "private";
+}
+
+function canUseUserCommand(msg) {
+  return isOwner(msg.from.id) || isPrivateChat(msg);
+}
+
+function blockPublicCommand(msg) {
+  if (isPrivateChat(msg)) {
+    return bot.sendMessage(msg.chat.id, "❌ Access denied.");
+  }
+
+  return;
 }
 
 function readJson(file, fallback) {
@@ -184,37 +201,16 @@ function formatAmount(value, maxDecimals = 4) {
   return n.toLocaleString(undefined, { maximumFractionDigits: maxDecimals });
 }
 
-function whaleClass(usdValue) {
-  const v = Number(usdValue || 0);
-  if (v >= 1000000) return { label: "GIANT WHALE", icon: "🦈" };
-  if (v >= 500000) return { label: "MEGA WHALE", icon: "🐳" };
-  return { label: "WHALE", icon: "🐋" };
-}
-
-function sideConfig(side) {
-  if (side === "BUY") return { label: "BUY", color: "#22C55E", icon: "●" };
-  if (side === "SELL") return { label: "SELL", color: "#EF4444", icon: "●" };
-  return { label: "TRANSFER", color: "#FACC15", icon: "●" };
-}
-
-function signalStrength(usdValue) {
-  if (usdValue >= 1000000) return "10/10";
-  if (usdValue >= 500000) return "9/10";
-  if (usdValue >= 250000) return "8/10";
-  if (usdValue >= 100000) return "7/10";
-  return "6/10";
-}
-
 function marketBias(change24h, netFlow, volume) {
   const c = Number(change24h || 0);
   const n = Number(netFlow || 0);
   const v = Number(volume || 0);
 
-  if (n > 250000 && c > -5) return { text: "Accumulation", color: "#22C55E" };
-  if (n < -250000) return { text: "Distribution", color: "#EF4444" };
-  if (c >= 2) return { text: "Bullish", color: "#22C55E" };
-  if (c <= -2 && v < 100000) return { text: "Bearish", color: "#EF4444" };
-  return { text: "Neutral", color: "#E5E7EB" };
+  if (n > 250000 && c > -5) return { text: "Accumulation 🟢", color: "#22C55E" };
+  if (n < -250000) return { text: "Distribution 🔴", color: "#EF4444" };
+  if (c >= 2) return { text: "Bullish 🟢", color: "#22C55E" };
+  if (c <= -2 && v < 100000) return { text: "Bearish 🔴", color: "#EF4444" };
+  return { text: "Neutral ⚪", color: "#E5E7EB" };
 }
 
 function addFlow(asset, side, amount, usdValue, price, source, txId) {
@@ -260,13 +256,6 @@ function getAssetFlow(asset, hours) {
   };
 }
 
-function gradient(ctx, x, y, w, h, c1, c2) {
-  const g = ctx.createLinearGradient(x, y, x + w, y + h);
-  g.addColorStop(0, c1);
-  g.addColorStop(1, c2);
-  return g;
-}
-
 function roundRect(ctx, x, y, w, h, r) {
   const rr = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
@@ -282,33 +271,6 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-function drawCircleToken(ctx, x, y, size, color, text, textColor = "#FFFFFF") {
-  ctx.save();
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = textColor;
-  ctx.font = `900 ${Math.floor(size * 0.52)}px Arial`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(text, x + size / 2, y + size / 2 + 1);
-  ctx.restore();
-}
-
-function drawLabel(ctx, text, x, y, color, bg) {
-  ctx.font = "900 28px Arial";
-  const padX = 18;
-  const w = ctx.measureText(text).width + padX * 2;
-  const h = 42;
-  ctx.fillStyle = bg;
-  roundRect(ctx, x, y - 31, w, h, 12);
-  ctx.fill();
-  ctx.fillStyle = color;
-  ctx.fillText(text, x + padX, y);
-  return w;
-}
 async function createSignalCard(data) {
   const width = 1200;
   const height = 520;
@@ -339,7 +301,7 @@ async function createSignalCard(data) {
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, width, height);
 
-  function roundRect(x, y, w, h, r) {
+  function rr(x, y, w, h, r) {
     ctx.beginPath();
     ctx.moveTo(x + r, y);
     ctx.lineTo(x + w - r, y);
@@ -357,17 +319,17 @@ async function createSignalCard(data) {
   ctx.shadowBlur = 25;
   ctx.strokeStyle = sideColor;
   ctx.lineWidth = 4;
-  roundRect(35, 35, 1130, 450, 36);
+  rr(35, 35, 1130, 450, 36);
   ctx.stroke();
   ctx.shadowBlur = 0;
 
   ctx.fillStyle = "#08182D";
-  roundRect(35, 35, 1130, 450, 36);
+  rr(35, 35, 1130, 450, 36);
   ctx.fill();
 
   ctx.strokeStyle = sideColor;
   ctx.lineWidth = 3;
-  roundRect(55, 55, 1090, 410, 30);
+  rr(55, 55, 1090, 410, 30);
   ctx.stroke();
 
   ctx.strokeStyle = "#7DD3FC";
@@ -391,15 +353,16 @@ async function createSignalCard(data) {
   ctx.fillStyle = "#FFFFFF";
   ctx.font = "900 58px sans-serif";
   ctx.fillText(`${tier} ${side}`, 270, 185);
-ctx.fillStyle = sideColor;
-roundRect(815, 118, 170, 50, 18);
-ctx.fill();
 
-ctx.fillStyle = "#020617";
-ctx.font = "900 30px sans-serif";
-ctx.textAlign = "center";
-ctx.fillText(asset, 900, 152);
-ctx.textAlign = "left";
+  ctx.fillStyle = sideColor;
+  rr(815, 118, 170, 50, 18);
+  ctx.fill();
+
+  ctx.fillStyle = "#020617";
+  ctx.font = "900 30px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(asset, 900, 152);
+  ctx.textAlign = "left";
 
   ctx.strokeStyle = "#334155";
   ctx.lineWidth = 4;
@@ -425,7 +388,7 @@ ctx.textAlign = "left";
   ctx.fillText(price, 690, 330);
 
   ctx.fillStyle = "#0F172A";
-  roundRect(690, 355, 330, 58, 18);
+  rr(690, 355, 330, 58, 18);
   ctx.fill();
 
   ctx.fillStyle = sideColor;
@@ -452,10 +415,9 @@ ctx.textAlign = "left";
   return canvas.toBuffer("image/png");
 }
 
-
-async function sendGroup(text) {
-await bot.sendMessage(TELEGRAM_CHANNEL_ID, text, {
-  parse_mode: "HTML",
+async function sendChannel(text) {
+  await bot.sendMessage(TELEGRAM_CHANNEL_ID, text, {
+    parse_mode: "HTML",
     disable_web_page_preview: true
   });
 }
@@ -473,7 +435,7 @@ async function sendSignalCard(data) {
 
     const caption = `${data.asset} ${captionIcon} | ${formatUsd(data.usdValue)}`;
 
-    bot.sendPhoto(TELEGRAM_CHANNEL_ID, buffer, {
+    await bot.sendPhoto(TELEGRAM_CHANNEL_ID, buffer, {
       caption,
       parse_mode: "HTML",
       reply_markup: {
@@ -487,11 +449,14 @@ async function sendSignalCard(data) {
     });
   } catch (err) {
     console.error("sendSignalCard error:", err.message);
-
   }
 }
 
 async function sendSummaryCard(hours = 24) {
+  if (typeof createSummaryCard !== "function") {
+    return sendChannel(buildSummary());
+  }
+
   const buffer = createSummaryCard(hours);
 
   await bot.sendPhoto(TELEGRAM_CHANNEL_ID, buffer, {
@@ -646,6 +611,7 @@ function extractMoralisAmount(s, side, price, usdValue) {
 
   return 0;
 }
+
 async function scanMoralisSwaps(asset) {
   if (!MORALIS_ENABLED || !MORALIS_API_KEY) return;
 
@@ -856,18 +822,20 @@ async function runSignals() {
 }
 
 function buildFlowReport(hours) {
-  let text = `🌊 <b>${hours}H FLOW</b>\n\n`;
+  let text = `🌊 <b>${hours}H CAPITAL FLOW</b>\n\n`;
+
+  let totalNet = 0;
 
   for (const asset of Object.keys(MARKETS)) {
     const f = getAssetFlow(asset, hours);
-    const m = MARKETS[asset];
-
-    const volumeText = formatUsd(f.volume);
     const netText = f.net >= 0 ? `+${formatUsd(f.net)}` : formatUsd(f.net);
+    totalNet += f.net;
 
-    text += `<b>${m.display}</b>\n`;
-    text += `Volume: ${volumeText} | Net: ${netText}\n\n`;
+    text += `<b>${asset}</b>: ${netText}\n`;
   }
+
+  text += `\n<b>Total:</b> ${totalNet >= 0 ? "+" : ""}${formatUsd(totalNet)}`;
+  text += `\n\n🐋 Track Smart Money Before Everyone Else`;
 
   return text;
 }
@@ -884,7 +852,7 @@ function buildTopReport(hours, type) {
 
   let text =
     type === "inflow"
-      ? `🏆 <b>TOP INFLOW ${hours}H</b>\n\n`
+      ? `📈 <b>TOP INFLOW ${hours}H</b>\n\n`
       : type === "outflow"
         ? `📉 <b>TOP OUTFLOW ${hours}H</b>\n\n`
         : `📊 <b>TOP VOLUME ${hours}H</b>\n\n`;
@@ -893,6 +861,8 @@ function buildTopReport(hours, type) {
     const value = type === "inflow" ? r.inflow : type === "outflow" ? r.outflow : r.volume;
     text += `${i + 1}. <b>${r.asset}</b> ${formatUsd(value)}\n`;
   });
+
+  text += `\n🐋 Track Smart Money Before Everyone Else`;
 
   return text;
 }
@@ -916,41 +886,59 @@ function buildSummary() {
     text += `<b>${asset}</b> → ${bias.text}\n`;
   }
 
-  text += `\nVolume: ${formatUsd(totalVolume)}\n`;
-  text += `Net: ${totalNet >= 0 ? "+" : ""}${formatUsd(totalNet)}\n`;
-  text += `Activity: ${whaleCount} signals\n`;
+  text += `\n🐋 <b>Whale Signals:</b> ${whaleCount}`;
+  text += `\n💰 <b>24H Volume:</b> ${formatUsd(totalVolume)}`;
+  text += `\n🌊 <b>Net Flow:</b> ${totalNet >= 0 ? "+" : ""}${formatUsd(totalNet)}`;
+  text += `\n\n🐋 Track Smart Money Before Everyone Else`;
 
   return text;
 }
 
+function buildHelp() {
+  return `📚 <b>WAI COMMANDS</b>
+
+<code>/prices</code>
+<code>/inflow</code>
+<code>/outflow</code>
+<code>/summary</code>
+<code>/flow24</code>
+<code>/verify WALLET_ADDRESS</code>
+<code>/myaccess</code>
+
+🐋 Track Smart Money Before Everyone Else`;
+}
+
 async function postFlowReport(hours) {
   if (!signalsEnabled) return;
-  await sendGroup(buildFlowReport(hours));
+  await sendChannel(buildFlowReport(hours));
 }
 
 bot.on("message", (msg) => {
   console.log("CHAT ID:", msg.chat.id);
+  console.log("TYPE:", msg.chat.type);
   console.log("TITLE:", msg.chat.title);
 });
 
 bot.onText(/\/start/, async (msg) => {
-  await bot.sendMessage(msg.chat.id, `
-WhaleSignals VIP Access
+  if (!canUseUserCommand(msg)) return blockPublicCommand(msg);
 
-Commands:
-/verify WALLET_ADDRESS
-/myaccess
-/markets
-/prices
-/price BTC
+  await bot.sendMessage(msg.chat.id, buildHelp(), {
+    parse_mode: "HTML"
+  });
+});
 
-Minimum Required:
-${MIN_WAI_ACCESS} WAI
-`);
+bot.onText(/\/help/, async (msg) => {
+  if (!canUseUserCommand(msg)) return blockPublicCommand(msg);
+
+  await bot.sendMessage(msg.chat.id, buildHelp(), {
+    parse_mode: "HTML"
+  });
 });
 
 bot.onText(/\/verify (.+)/, async (msg, match) => {
-  const telegramId = String(msg.chat.id);
+  if (!canUseUserCommand(msg)) return blockPublicCommand(msg);
+
+  const telegramId = String(msg.from.id);
   const wallet = match[1].trim();
 
   try {
@@ -958,19 +946,21 @@ bot.onText(/\/verify (.+)/, async (msg, match) => {
       return bot.sendMessage(msg.chat.id, "❌ Invalid wallet address.");
     }
 
-  const balance = await getWaiBalance(wallet);
+    const balance = await getWaiBalance(wallet);
 
-if (telegramId === OWNER_TELEGRAM_ID) {
-  await bot.sendMessage(msg.chat.id, "✅ Owner Access Granted");
-} else if (balance < MIN_WAI_ACCESS) {
-  return bot.sendMessage(
-    msg.chat.id,
-    `❌ Access Denied
+    if (telegramId === OWNER_TELEGRAM_ID) {
+      await bot.sendMessage(msg.chat.id, "✅ Owner Access Granted");
+    } else if (balance < MIN_WAI_ACCESS) {
+      return bot.sendMessage(
+        msg.chat.id,
+        `❌ Access Denied
+
 Wallet: ${shortHash(wallet)}
 Balance: ${balance} WAI
 Required Minimum: ${MIN_WAI_ACCESS} WAI`
-  );
-}
+      );
+    }
+
     const users = readJson(USERS_FILE, []);
     const existingIndex = users.findIndex(u => String(u.telegramId) === telegramId);
 
@@ -982,7 +972,8 @@ Required Minimum: ${MIN_WAI_ACCESS} WAI`
       verifiedAt: nowIso(),
       lastCheck: nowIso()
     };
-        if (existingIndex >= 0) users[existingIndex] = { ...users[existingIndex], ...userData };
+
+    if (existingIndex >= 0) users[existingIndex] = { ...users[existingIndex], ...userData };
     else users.push(userData);
 
     writeJson(USERS_FILE, users);
@@ -1009,7 +1000,9 @@ Uses: 1`
 });
 
 bot.onText(/\/myaccess/, async (msg) => {
-  const telegramId = String(msg.chat.id);
+  if (!canUseUserCommand(msg)) return blockPublicCommand(msg);
+
+  const telegramId = String(msg.from.id);
   const users = readJson(USERS_FILE, []);
   const user = users.find(u => String(u.telegramId) === telegramId);
 
@@ -1025,7 +1018,60 @@ Last Check: ${user.lastCheck || "Never"}
 `);
 });
 
+bot.onText(/\/prices/, async (msg) => {
+  if (!canUseUserCommand(msg)) return blockPublicCommand(msg);
+
+  await updateLivePrices();
+
+  let text = `📊 <b>LIVE PRICES</b>\n\n`;
+
+  for (const asset of Object.keys(MARKETS)) {
+    const p = livePrices[asset];
+    text += `<b>${asset}</b> ${formatUsd(p.price)} ${formatPct(p.change24h)}\n`;
+  }
+
+  text += `\n🐋 Track Smart Money Before Everyone Else`;
+
+  await bot.sendMessage(msg.chat.id, text, { parse_mode: "HTML" });
+});
+
+bot.onText(/\/inflow/, async (msg) => {
+  if (!canUseUserCommand(msg)) return blockPublicCommand(msg);
+
+  await bot.sendMessage(msg.chat.id, buildTopReport(24, "inflow"), {
+    parse_mode: "HTML"
+  });
+});
+
+bot.onText(/\/outflow/, async (msg) => {
+  if (!canUseUserCommand(msg)) return blockPublicCommand(msg);
+
+  await bot.sendMessage(msg.chat.id, buildTopReport(24, "outflow"), {
+    parse_mode: "HTML"
+  });
+});
+
+bot.onText(/\/summary/, async (msg) => {
+  if (!canUseUserCommand(msg)) return blockPublicCommand(msg);
+
+  await updateLivePrices();
+
+  await bot.sendMessage(msg.chat.id, buildSummary(), {
+    parse_mode: "HTML"
+  });
+});
+
+bot.onText(/\/flow24/, async (msg) => {
+  if (!canUseUserCommand(msg)) return blockPublicCommand(msg);
+
+  await bot.sendMessage(msg.chat.id, buildFlowReport(24), {
+    parse_mode: "HTML"
+  });
+});
+
 bot.onText(/\/markets/, async (msg) => {
+  if (!isOwner(msg.from.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
+
   await bot.sendMessage(msg.chat.id, `
 WhaleSignals Markets
 
@@ -1045,20 +1091,21 @@ Whale: $50K+
 Mega Whale: $500K+
 Giant Whale: $1M+
 
-Commands:
+User Commands:
+/help
 /prices
-/price BTC
-/flow12
-/flow24
-/topinflow
-/topoutflow
+/inflow
+/outflow
 /summary
-/summarycard
-/testcard
+/flow24
+/verify
+/myaccess
 `);
 });
 
 bot.onText(/\/price (.+)/, async (msg, match) => {
+  if (!isOwner(msg.from.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
+
   const asset = match[1].trim().toUpperCase();
 
   if (!MARKETS[asset]) {
@@ -1084,48 +1131,22 @@ Bias: ${bias.text}
 `, { parse_mode: "HTML" });
 });
 
-bot.onText(/\/prices/, async (msg) => {
-  await updateLivePrices();
-
-  let text = `📊 <b>LIVE PRICES</b>\n\n`;
-
-  for (const asset of Object.keys(MARKETS)) {
-    const p = livePrices[asset];
-    text += `<b>${asset}</b> ${formatUsd(p.price)} ${formatPct(p.change24h)}\n`;
-  }
-
-  await bot.sendMessage(msg.chat.id, text, { parse_mode: "HTML" });
-});
-
 bot.onText(/\/flow12/, async (msg) => {
   if (!isOwner(msg.from.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
-  await sendGroup(buildFlowReport(12));
+  await sendChannel(buildFlowReport(12));
   await bot.sendMessage(msg.chat.id, "✅ 12H flow sent.");
-});
-
-bot.onText(/\/flow24/, async (msg) => {
-  if (!isOwner(msg.from.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
-  await sendGroup(buildFlowReport(24));
-  await bot.sendMessage(msg.chat.id, "✅ 24H flow sent.");
 });
 
 bot.onText(/\/topinflow/, async (msg) => {
   if (!isOwner(msg.from.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
-  await sendGroup(buildTopReport(24, "inflow"));
+  await sendChannel(buildTopReport(24, "inflow"));
   await bot.sendMessage(msg.chat.id, "✅ Top inflow sent.");
 });
 
 bot.onText(/\/topoutflow/, async (msg) => {
   if (!isOwner(msg.from.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
-  await sendGroup(buildTopReport(24, "outflow"));
+  await sendChannel(buildTopReport(24, "outflow"));
   await bot.sendMessage(msg.chat.id, "✅ Top outflow sent.");
-});
-
-bot.onText(/\/summary/, async (msg) => {
-  if (!isOwner(msg.from.id)) return bot.sendMessage(msg.chat.id, "Access denied.");
-  await updateLivePrices();
-  await sendGroup(buildSummary());
-  await bot.sendMessage(msg.chat.id, "✅ Summary sent.");
 });
 
 bot.onText(/\/summarycard/, async (msg) => {
@@ -1206,6 +1227,7 @@ updateLivePrices();
 setInterval(updateLivePrices, PRICE_UPDATE_INTERVAL_SECONDS * 1000);
 setInterval(runSignals, CHECK_SIGNALS_INTERVAL_SECONDS * 1000);
 setInterval(checkAllHolders, CHECK_HOLDERS_INTERVAL_SECONDS * 1000);
+
 setTimeout(() => {
   postFlowReport(12);
   setInterval(() => postFlowReport(12), FLOW12_INTERVAL_SECONDS * 1000);
@@ -1215,8 +1237,8 @@ setTimeout(() => {
   postFlowReport(24);
   setInterval(() => postFlowReport(24), FLOW24_INTERVAL_SECONDS * 1000);
 }, FLOW24_INTERVAL_SECONDS * 1000);
+
 console.log("WhaleSignals Premium Card Bot running...");
 console.log("Markets: BTC ETH BNB AVAX MATIC/POL");
 console.log("Prices: CoinGecko");
-console.log("Moralis DEX:", MORALIS_ENABLED && !!MORALIS_API_KEY);
 console.log("Signals:", signalsEnabled);
