@@ -1,13 +1,15 @@
 {
-  "name": "whalesignalsai",
+  "name": "wai-radar-bot",
   "version": "1.0.0",
   "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.80",
     "axios": "^1.7.9",
     "dotenv": "^16.4.7",
     "ethers": "^6.13.5",
-    "node-telegram-bot-api": "^0.66.0",
-    "sharp": "^0.33.5"
+    "node-telegram-bot-api": "^0.66.0"
   }
 }
